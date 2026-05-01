@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["gcc", "openssl", "libffi"]
+
+[start]
+cmd = "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"

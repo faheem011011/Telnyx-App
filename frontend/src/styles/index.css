@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light theme tokens */
+  --bg-primary: 255 255 255;
+  --bg-secondary: 249 250 251;
+  --bg-tertiary: 243 244 246;
+  --bg-hover: 243 244 246;
+  --bg-active: 238 242 255;
+
+  --border-primary: 229 231 235;
+  --border-secondary: 209 213 219;
+
+  --text-primary: 17 24 39;
+  --text-secondary: 75 85 99;
+  --text-tertiary: 156 163 175;
+  --text-inverse: 255 255 255;
+
+  --accent: 20 84 246;
+  --accent-hover: 16 67 197;
+  --accent-soft: 238 242 255;
+
+  --success: 16 185 129;
+  --danger: 239 68 68;
+  --warning: 245 158 11;
+
+  --skeleton: #e5e7eb;
+}
+
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: rgb(var(--bg-primary));
+  color: rgb(var(--text-primary));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border-secondary));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--text-tertiary));
+}
+
+@layer components {
+  .surface {
+    background: rgb(var(--bg-primary));
+    color: rgb(var(--text-primary));
+  }
+
+  .surface-secondary {
+    background: rgb(var(--bg-secondary));
+    color: rgb(var(--text-primary));
+  }
+
+  .surface-tertiary {
+    background: rgb(var(--bg-tertiary));
+    color: rgb(var(--text-primary));
+  }
+
+  .hover\:surface-tertiary:hover {
+    background: rgb(var(--bg-tertiary));
+  }
+
+  .border-default {
+    border-color: rgb(var(--border-primary));
+  }
+
+  .text-muted {
+    color: rgb(var(--text-secondary));
+  }
+
+  .text-faint {
+    color: rgb(var(--text-tertiary));
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-white transition-all;
+    background: rgb(var(--accent));
+  }
+  .btn-primary:hover {
+    background: rgb(var(--accent-hover));
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium transition-all;
+    color: rgb(var(--text-secondary));
+  }
+  .btn-ghost:hover {
+    background: rgb(var(--bg-hover));
+    color: rgb(var(--text-primary));
+  }
+
+  .input {
+    @apply w-full px-3.5 py-2.5 rounded-lg text-sm outline-none transition-all;
+    background: rgb(var(--bg-secondary));
+    border: 1px solid rgb(var(--border-primary));
+    color: rgb(var(--text-primary));
+  }
+  .input:focus {
+    border-color: rgb(var(--accent));
+    box-shadow: 0 0 0 3px rgb(var(--accent) / 0.15);
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all;
+    color: rgb(var(--text-secondary));
+  }
+  .nav-item:hover {
+    background: rgb(var(--bg-hover));
+    color: rgb(var(--text-primary));
+  }
+  .nav-item.active {
+    background: rgb(var(--accent-soft));
+    color: rgb(var(--accent));
+  }
+
+  .dark .nav-item.active {
+    background: rgb(var(--bg-active));
+    color: rgb(var(--text-primary));
+  }
+
+  .tab-item {
+    @apply relative px-4 py-3 text-sm font-medium cursor-pointer transition-all;
+    color: rgb(var(--text-secondary));
+  }
+  .tab-item:hover {
+    color: rgb(var(--text-primary));
+  }
+  .tab-item.active {
+    color: rgb(var(--accent));
+  }
+  .tab-item.active::after {
+    content: '';
+    @apply absolute bottom-0 left-0 right-0 h-0.5 rounded-t;
+    background: rgb(var(--accent));
+  }
+}
