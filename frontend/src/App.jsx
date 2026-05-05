@@ -2,7 +2,7 @@ import { useState, useEffect, Component } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import api from './services/api';
-import { TwilioProvider } from './context/TwilioContext';
+import { TelnyxProvider } from './context/TelnyxContext';
 import Sidebar from './components/Sidebar';
 import Dialer from './components/Dialer';
 import IncomingCallModal from './components/IncomingCallModal';
@@ -57,7 +57,7 @@ function UserLayout() {
   const [dialerOpen, setDialerOpen] = useState(false);
 
   return (
-    <TwilioProvider>
+    <TelnyxProvider>
       <div className="flex h-screen w-screen overflow-hidden">
         <Sidebar onOpenDialer={() => setDialerOpen(true)} />
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -75,7 +75,7 @@ function UserLayout() {
         <IncomingCallModal />
         <ActiveCallPanel />
       </div>
-    </TwilioProvider>
+    </TelnyxProvider>
   );
 }
 
@@ -83,7 +83,7 @@ function AdminLayout() {
   const [dialerOpen, setDialerOpen] = useState(false);
 
   return (
-    <TwilioProvider>
+    <TelnyxProvider>
       <div className="flex h-screen w-screen overflow-hidden">
         <Sidebar onOpenDialer={() => setDialerOpen(true)} />
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -103,7 +103,7 @@ function AdminLayout() {
         <IncomingCallModal />
         <ActiveCallPanel />
       </div>
-    </TwilioProvider>
+    </TelnyxProvider>
   );
 }
 

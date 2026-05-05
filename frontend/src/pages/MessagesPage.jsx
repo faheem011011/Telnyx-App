@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Send, Phone, ArrowLeft, MessageCircle, Search } from 'lucide-react';
 import { messagesApi } from '../services/api';
-import { useTwilio } from '../context/TwilioContext';
+import { useTelnyx as useTwilio } from '../context/TelnyxContext';
 import { formatPhone, formatCallDate, toE164 } from '../utils/format';
 import Avatar from '../components/Avatar';
 

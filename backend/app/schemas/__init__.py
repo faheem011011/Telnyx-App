@@ -81,13 +81,13 @@ class UserWithNumbersOut(BaseModel):
     is_active: bool
     email_verified: bool
     created_at: datetime
-    assigned_numbers: list["TwilioNumberOut"] = []
+    assigned_numbers: list["PhoneNumberOut"] = []
 
 
 # ============================================================
-# Admin — Twilio number management
+# Admin — phone number management
 # ============================================================
-class TwilioNumberOut(BaseModel):
+class PhoneNumberOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -148,7 +148,6 @@ class ContactOut(BaseModel):
 
     id: int
     owner_id: int
-    owner_name: str | None = None
     name: str
     phone_number: str
     email: str | None
@@ -167,7 +166,7 @@ class CallOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    twilio_call_sid: str | None
+    call_sid: str | None
     direction: str
     from_number: str
     to_number: str
@@ -201,7 +200,7 @@ class MessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    twilio_message_sid: str | None
+    message_sid: str | None
     direction: str
     from_number: str
     to_number: str
@@ -226,9 +225,9 @@ class ConversationOut(BaseModel):
 
 
 # ============================================================
-# Twilio Token
+# Voice Token
 # ============================================================
-class TwilioTokenResponse(BaseModel):
+class VoiceTokenResponse(BaseModel):
     token: str
     identity: str
 

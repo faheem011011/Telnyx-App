@@ -6,13 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings."""
 
-    # Twilio
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_api_key_sid: str = ""
-    twilio_api_key_secret: str = ""
-    twilio_twiml_app_sid: str = ""
-    twilio_phone_number: str = ""
+    # Telnyx
+    telnyx_api_key: str = ""
+    telnyx_public_key: str = ""          # Webhook public key from Telnyx portal
+    telnyx_phone_number: str = ""
+    telnyx_connection_id: str = ""       # SIP Connection ID for WebRTC credentials
+    telnyx_messaging_profile_id: str = ""  # Messaging profile for SMS
 
     # App
     secret_key: str = "dev-secret-key-change-in-production"

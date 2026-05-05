@@ -26,6 +26,8 @@ class User(Base):
     google_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    telnyx_credential_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    telnyx_sip_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     contacts: Mapped[list["Contact"]] = relationship(
@@ -37,16 +39,16 @@ class User(Base):
     messages: Mapped[list["Message"]] = relationship(
         "Message", back_populates="owner", cascade="all, delete-orphan"
     )
-    assigned_numbers: Mapped[list["TwilioNumber"]] = relationship(
-        "TwilioNumber",
+    assigned_numbers: Mapped[list["PhoneNumber"]] = relationship(
+        "PhoneNumber",
         back_populates="assigned_user",
-        foreign_keys="TwilioNumber.assigned_to_user_id",
+        foreign_keys="PhoneNumber.assigned_to_user_id",
         passive_deletes=True,
     )
 
 
-class TwilioNumber(Base):
-    """Twilio phone number — purchased and optionally assigned to a user."""
+class PhoneNumber(Base):
+    """Telnyx phone number — purchased and optionally assigned to a user."""
 
     __tablename__ = "twilio_numbers"
 
@@ -98,8 +100,8 @@ class Call(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    twilio_call_sid: Mapped[str | None] = mapped_column(
-        String(64), unique=True, index=True, nullable=True
+    call_sid: Mapped[str | None] = mapped_column(
+        "twilio_call_sid", String(64), unique=True, index=True, nullable=True
     )
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
     from_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -127,8 +129,8 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    twilio_message_sid: Mapped[str | None] = mapped_column(
-        String(64), unique=True, index=True, nullable=True
+    message_sid: Mapped[str | None] = mapped_column(
+        "twilio_message_sid", String(64), unique=True, index=True, nullable=True
     )
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
     from_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)

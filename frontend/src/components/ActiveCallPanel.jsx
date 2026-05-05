@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PhoneOff, Mic, MicOff, Grid3x3, Circle, Square } from 'lucide-react';
-import { useTwilio } from '../context/TwilioContext';
+import { useTelnyx as useTwilio } from '../context/TelnyxContext';
 import { formatPhone, formatDuration } from '../utils/format';
 import Avatar from './Avatar';
 

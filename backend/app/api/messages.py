@@ -3,12 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, and_, desc, func
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
-from app.models import Contact, Message, TwilioNumber, User
+from app.models import Contact, Message, PhoneNumber, User
 from app.schemas import ContactOut, ConversationOut, MessageCreate, MessageOut
 from app.services.deps import get_current_user
-from app.services.twilio_service import send_sms
+from app.services.telnyx_service import send_sms
 
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
@@ -17,13 +16,14 @@ router = APIRouter(prefix="/api/messages", tags=["messages"])
 def _from_number(user: User, db: Session) -> str:
     """Resolve the best SMS-capable sending number for this user.
 
-    Priority: SMS-capable TwilioNumber assigned to user → user.phone_number → global fallback.
+    Priority: SMS-capable PhoneNumber assigned to user → user.phone_number.
+    Raises HTTP 400 if no number is available.
     """
     tn = (
-        db.query(TwilioNumber)
+        db.query(PhoneNumber)
         .filter(
-            TwilioNumber.assigned_to_user_id == user.id,
-            TwilioNumber.cap_sms.is_(True),
+            PhoneNumber.assigned_to_user_id == user.id,
+            PhoneNumber.cap_sms.is_(True),
         )
         .first()
     )
@@ -31,7 +31,10 @@ def _from_number(user: User, db: Session) -> str:
         return tn.phone_number
     if user.phone_number:
         return user.phone_number
-    return settings.twilio_phone_number
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="No phone number assigned to your account. Ask an admin to assign a Telnyx number before sending messages.",
+    )
 
 
 @router.get("/conversations")
@@ -124,7 +127,7 @@ def send_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Send an SMS message from the user's assigned Twilio number."""
+    """Send an SMS message from the user's assigned Telnyx number."""
     from_num = _from_number(current_user, db)
     try:
         result = send_sms(payload.to_number, payload.body, from_num)
@@ -135,7 +138,7 @@ def send_message(
 
     msg = Message(
         owner_id=current_user.id,
-        twilio_message_sid=result["sid"],
+        message_sid=result["sid"],
         direction="outbound",
         from_number=from_num,
         to_number=payload.to_number,

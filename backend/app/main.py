@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import analytics, auth, calls, contacts, messages, twilio_webhooks
+from app.api import analytics, auth, calls, contacts, messages, telnyx_webhooks
 from app.api import admin
 from app.config import settings
 from app.limiter import limiter
@@ -32,7 +32,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(
     title="AlphaCall API",
-    description="Twilio-powered browser phone — calls, SMS, voicemail",
+    description="Telnyx-powered browser phone — calls, SMS, voicemail",
     version="2.0.0",
     lifespan=lifespan,
     docs_url=None,
@@ -49,7 +49,6 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174",
-        "https://twilio-voip-full-web-app.vercel.app",
         "https://call.alphabridgeconsulting.ai",
     ],
     allow_credentials=True,
@@ -62,7 +61,7 @@ app.include_router(admin.router)
 app.include_router(contacts.router)
 app.include_router(calls.router)
 app.include_router(messages.router)
-app.include_router(twilio_webhooks.router)
+app.include_router(telnyx_webhooks.router)
 app.include_router(analytics.router)
 
 
@@ -75,5 +74,5 @@ def root():
 def health():
     return {
         "status": "ok",
-        "twilio_configured": bool(settings.twilio_account_sid and settings.twilio_auth_token),
+        "telnyx_configured": bool(settings.telnyx_api_key),
     }

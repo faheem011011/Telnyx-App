@@ -60,10 +60,10 @@ export const callsApi = {
   update: (id, data) => api.patch(`/api/calls/${id}`, data).then((r) => r.data),
   markAllRead: () => api.post('/api/calls/mark-all-read').then((r) => r.data),
   remove: (id) => api.delete(`/api/calls/${id}`).then((r) => r.data),
-  startRecording: (callSid) =>
-    api.post('/api/calls/recording/start', { call_sid: callSid }).then((r) => r.data),
-  stopRecording: (callSid, recordingSid) =>
-    api.post('/api/calls/recording/stop', { call_sid: callSid, recording_sid: recordingSid }).then((r) => r.data),
+  startRecording: () =>
+    api.post('/api/calls/recording/start').then((r) => r.data),
+  stopRecording: () =>
+    api.post('/api/calls/recording/stop').then((r) => r.data),
 };
 
 // ============================================================

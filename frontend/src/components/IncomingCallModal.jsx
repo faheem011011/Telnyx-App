@@ -1,5 +1,5 @@
 import { Phone, PhoneOff } from 'lucide-react';
-import { useTwilio } from '../context/TwilioContext';
+import { useTelnyx as useTwilio } from '../context/TelnyxContext';
 import { formatPhone } from '../utils/format';
 import Avatar from './Avatar';
 
@@ -8,7 +8,7 @@ export default function IncomingCallModal() {
 
   if (!incomingCall) return null;
 
-  const from = incomingCall.parameters?.From || 'Unknown caller';
+  const from = incomingCall.options?.remoteCallerNumber || incomingCall.options?.destinationNumber || 'Unknown caller';
 
   return (
     <div
@@ -90,7 +90,7 @@ export default function IncomingCallModal() {
               {formatPhone(from)}
             </div>
             <div style={{ fontSize: 11.5, color: '#64748b' }}>
-              calling your Twilio number
+              calling your Telnyx number
             </div>
           </div>
         </div>

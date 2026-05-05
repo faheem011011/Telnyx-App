@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@react-oauth/google": "^0.12.1",
-    "@twilio/voice-sdk": "^2.14.0",
+    "@telnyx/webrtc": "^2.21.2",
     "axios": "^1.8.1",
     "lucide-react": "^0.473.0",
     "motion": "^12.38.0",

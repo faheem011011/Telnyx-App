@@ -1,9 +1,9 @@
-"""Admin-only endpoints: user management, Twilio number management, audit log."""
+"""Admin-only endpoints: user management, Telnyx phone number management, audit log."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AuditLog, TwilioNumber, User
+from app.models import AuditLog, PhoneNumber, User
 from app.services.email import send_verification_email
 from app.services.verification import issue_verification_token, make_verification_url
 from app.schemas import (
@@ -11,7 +11,7 @@ from app.schemas import (
     NumberAssignRequest,
     NumberPurchaseRequest,
     NumberSearchResult,
-    TwilioNumberOut,
+    PhoneNumberOut,
     UserAdminCreate,
     UserAdminUpdate,
     UserOut,
@@ -20,7 +20,7 @@ from app.schemas import (
 from app.services.audit import get_client_ip, log_audit
 from app.services.deps import require_admin
 from app.services.security import hash_password
-from app.services.twilio_service import (
+from app.services.telnyx_service import (
     list_owned_numbers,
     purchase_number,
     release_number,
@@ -203,29 +203,29 @@ def resend_verification(
 
 
 # ============================================================
-# Twilio number management
+# Phone number management
 # ============================================================
 
-@router.get("/numbers", response_model=list[TwilioNumberOut])
+@router.get("/numbers", response_model=list[PhoneNumberOut])
 def list_numbers(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
-) -> list[TwilioNumberOut]:
+) -> list[PhoneNumberOut]:
     numbers = (
-        db.query(TwilioNumber)
-        .outerjoin(User, TwilioNumber.assigned_to_user_id == User.id)
-        .order_by(TwilioNumber.purchased_at.desc())
+        db.query(PhoneNumber)
+        .outerjoin(User, PhoneNumber.assigned_to_user_id == User.id)
+        .order_by(PhoneNumber.purchased_at.desc())
         .all()
     )
-    return [TwilioNumberOut.model_validate(n) for n in numbers]
+    return [PhoneNumberOut.model_validate(n) for n in numbers]
 
 
-@router.post("/numbers/sync", response_model=list[TwilioNumberOut])
+@router.post("/numbers/sync", response_model=list[PhoneNumberOut])
 def sync_numbers(
     request: Request,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
-) -> list[TwilioNumberOut]:
+) -> list[PhoneNumberOut]:
     try:
         owned = list_owned_numbers()
     except ValueError as e:
@@ -233,9 +233,16 @@ def sync_numbers(
 
     synced = []
     for n in owned:
-        existing = db.query(TwilioNumber).filter(TwilioNumber.sid == n["sid"]).first()
+        # Match by phone_number first (stable across sid format changes),
+        # then fall back to sid. This prevents IntegrityError when the DB
+        # has a different sid format (E.164 vs UUID) than what the API returns.
+        existing = (
+            db.query(PhoneNumber)
+            .filter(PhoneNumber.phone_number == n["phone_number"])
+            .first()
+        )
         if existing is None:
-            tn = TwilioNumber(
+            tn = PhoneNumber(
                 sid=n["sid"],
                 phone_number=n["phone_number"],
                 friendly_name=n["friendly_name"],
@@ -246,6 +253,8 @@ def sync_numbers(
             db.add(tn)
             synced.append(tn)
         else:
+            # Update sid to the canonical resource ID returned by the API
+            existing.sid = n["sid"]
             synced.append(existing)
 
     log_audit(
@@ -262,7 +271,7 @@ def sync_numbers(
         except Exception:
             pass
 
-    return [TwilioNumberOut.model_validate(n) for n in synced]
+    return [PhoneNumberOut.model_validate(n) for n in synced]
 
 
 @router.get("/numbers/search", response_model=list[NumberSearchResult])
@@ -285,20 +294,20 @@ def search_numbers(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Twilio error: {e}",
+            detail=f"Telnyx error: {e}",
         )
     return [NumberSearchResult(**r) for r in results]
 
 
-@router.post("/numbers/purchase", response_model=TwilioNumberOut, status_code=status.HTTP_201_CREATED)
+@router.post("/numbers/purchase", response_model=PhoneNumberOut, status_code=status.HTTP_201_CREATED)
 def buy_number(
     request: Request,
     payload: NumberPurchaseRequest,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
-) -> TwilioNumberOut:
-    existing = db.query(TwilioNumber).filter(
-        TwilioNumber.phone_number == payload.phone_number
+) -> PhoneNumberOut:
+    existing = db.query(PhoneNumber).filter(
+        PhoneNumber.phone_number == payload.phone_number
     ).first()
     if existing:
         raise HTTPException(
@@ -313,10 +322,10 @@ def buy_number(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Twilio purchase failed: {e}",
+            detail=f"Telnyx purchase failed: {e}",
         )
 
-    tn = TwilioNumber(
+    tn = PhoneNumber(
         sid=result["sid"],
         phone_number=result["phone_number"],
         friendly_name=result["friendly_name"],
@@ -337,18 +346,18 @@ def buy_number(
     )
     db.commit()
     db.refresh(tn)
-    return TwilioNumberOut.model_validate(tn)
+    return PhoneNumberOut.model_validate(tn)
 
 
-@router.post("/numbers/{number_id}/assign", response_model=TwilioNumberOut)
+@router.post("/numbers/{number_id}/assign", response_model=PhoneNumberOut)
 def assign_number(
     request: Request,
     number_id: int,
     payload: NumberAssignRequest,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
-) -> TwilioNumberOut:
-    tn = db.query(TwilioNumber).filter(TwilioNumber.id == number_id).first()
+) -> PhoneNumberOut:
+    tn = db.query(PhoneNumber).filter(PhoneNumber.id == number_id).first()
     if not tn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Number not found")
 
@@ -370,17 +379,17 @@ def assign_number(
     )
     db.commit()
     db.refresh(tn)
-    return TwilioNumberOut.model_validate(tn)
+    return PhoneNumberOut.model_validate(tn)
 
 
-@router.post("/numbers/{number_id}/unassign", response_model=TwilioNumberOut)
+@router.post("/numbers/{number_id}/unassign", response_model=PhoneNumberOut)
 def unassign_number(
     request: Request,
     number_id: int,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
-) -> TwilioNumberOut:
-    tn = db.query(TwilioNumber).filter(TwilioNumber.id == number_id).first()
+) -> PhoneNumberOut:
+    tn = db.query(PhoneNumber).filter(PhoneNumber.id == number_id).first()
     if not tn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Number not found")
 
@@ -397,7 +406,7 @@ def unassign_number(
     )
     db.commit()
     db.refresh(tn)
-    return TwilioNumberOut.model_validate(tn)
+    return PhoneNumberOut.model_validate(tn)
 
 
 @router.delete("/numbers/{number_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -407,7 +416,7 @@ def delete_number(
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
 ) -> None:
-    tn = db.query(TwilioNumber).filter(TwilioNumber.id == number_id).first()
+    tn = db.query(PhoneNumber).filter(PhoneNumber.id == number_id).first()
     if not tn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Number not found")
 
@@ -418,7 +427,7 @@ def delete_number(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Twilio release failed: {e}",
+            detail=f"Telnyx release failed: {e}",
         )
 
     db.delete(tn)

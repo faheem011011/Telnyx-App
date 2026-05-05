@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Phone, ChevronLeft } from 'lucide-react';
-import { useTwilio } from '../context/TwilioContext';
+import { useTelnyx as useTwilio } from '../context/TelnyxContext';
 import { toE164, formatPhone } from '../utils/format';
 
 const KEYS = [

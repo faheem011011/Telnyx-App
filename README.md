@@ -1,23 +1,22 @@
 # AlphaCall — Browser-based VoIP App
 
-A professional, Dialpad/OpenPhone-style calling and messaging web app powered by Twilio. Make and receive real phone calls entirely in your browser, send/receive SMS, manage contacts, and administer your team — all from one clean interface with light and dark themes.
+A professional, Dialpad/OpenPhone-style calling and messaging web app powered by **Telnyx**. Make and receive real phone calls entirely in your browser, send/receive SMS, manage contacts, and administer your team — all from one clean interface with light and dark themes.
 
 ## Tech stack
 
 **Backend**
-- Python **3.14.4**
-- FastAPI **0.136.0**
-- SQLAlchemy 2.0.49 + SQLite
-- Pydantic 2.13
-- Twilio Python SDK 9.10.5
+- Python 3.12+
+- FastAPI
+- SQLAlchemy 2.0 + PostgreSQL
+- Pydantic 2
+- Telnyx Python SDK 4.x
 - JWT auth (python-jose) + bcrypt
-- Google OAuth (google-auth)
 
 **Frontend**
-- React **19.2.5**
+- React 19
 - Vite 6
 - Tailwind CSS 3.4
-- Twilio Voice JS SDK 2.14 (WebRTC)
+- Telnyx WebRTC SDK (`@telnyx/webrtc`) — browser softphone
 - React Router 7
 - Recharts
 - Lucide icons
@@ -27,26 +26,20 @@ A professional, Dialpad/OpenPhone-style calling and messaging web app powered by
 ## Features
 
 ### For all users
-- 📞 **Outbound calls** — dial any US number from your browser via WebRTC
-- 📲 **Inbound calls** — receive calls to your Twilio number, ring in-browser, accept/decline
+- 📞 **Outbound calls** — dial any number from your browser via WebRTC
+- 📲 **Inbound calls** — receive calls to your Telnyx number, ring in-browser, accept/decline
 - 💬 **SMS** — send/receive text messages with threaded conversations
 - 🎙️ **Voicemail** — missed calls capture voicemail with automatic transcription
-- 🎧 **Call recording** — listen to recorded calls inline
 - 👥 **Contacts** — full CRUD address book with favorites and blocking
 - 🔎 **Search & filter** — search across calls, contacts, messages
-- 🌓 **Light + Dark mode** — professional theming in both
+- 🌓 **Light + Dark mode**
 
 ### Admin only
-- 🛡️ **Role-based access** — Admin and User roles, enforced on both frontend and backend
-- 📊 **Analytics dashboard** — KPI cards, call volume charts, hourly/daily breakdowns, top area codes, per-department and per-user drill-down
-- 📥 **Export CSV** — department-aggregated or per-user analytics export
-- 🏢 **Department management** — Data Team, HR Team, BD Team, AI/ML Team, DevOps Team
-- 📱 **Twilio number management** — purchase, assign, unassign, and release numbers from the admin panel
+- 🛡️ **Role-based access** — Admin and User roles
+- 📊 **Analytics dashboard** — KPI cards, call volume charts, per-department and per-user drill-down
+- 📥 **Export CSV** — department-aggregated or per-user analytics
+- 📱 **Phone number management** — purchase, assign, unassign, and release Telnyx numbers
 - 👤 **User management** — create, edit, deactivate users; assign departments and roles
-
-### Authentication
-- 🔐 **Email + password login** and signup
-- 🔑 **Google OAuth** — one-click sign-in with Google
 
 ---
 
@@ -54,106 +47,83 @@ A professional, Dialpad/OpenPhone-style calling and messaging web app powered by
 
 ### Prerequisites
 
-- **Python 3.14.4+** ([download](https://www.python.org/downloads/))
+- **Python 3.12+**
 - **Node.js 20+** and npm
-- **ngrok** (for local Twilio webhooks) — [download](https://ngrok.com/download)
-- A **Twilio account** — [sign up free](https://www.twilio.com/try-twilio)
+- **ngrok** (for local Telnyx webhooks) — [download](https://ngrok.com/download)
+- A **Telnyx account** — [sign up](https://telnyx.com)
 
 ### 1. Clone and install
 
 ```bash
 # Backend
 cd backend
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env            # then fill in your credentials
 
-# Frontend (in a new terminal)
+# Frontend
 cd ../frontend
 npm install
-cp .env.example .env.local      # then fill in values
+cp .env.example .env.local
 ```
 
 ### 2. Configure credentials
 
-Fill in `backend/.env` with your Twilio and app settings (see [Twilio setup](#twilio-setup-walkthrough) below).
-
-Optionally add your Google Client ID to `frontend/.env.local` and `backend/.env` to enable Google login.
+Fill in `backend/.env` with your Telnyx credentials (see [Telnyx setup](#telnyx-setup-walkthrough) below).
 
 ### 3. Run the app
 
 ```bash
 # Terminal 1 — backend
 cd backend
-source venv/bin/activate
 uvicorn app.main:app --reload
 
 # Terminal 2 — frontend
 cd frontend
 npm run dev
 
-# Terminal 3 — ngrok (so Twilio can reach your backend)
+# Terminal 3 — ngrok (so Telnyx can reach your backend)
 ngrok http 8000
 ```
 
-Open [http://localhost:5173](http://localhost:5173) and log in with the default admin credentials from `backend/.env` (default: `admin@example.com` / `changeme123`).
+Open [http://localhost:5173](http://localhost:5173).
 
 ---
 
 ## Database migrations (Alembic)
 
-Schema changes are managed with Alembic. Run all commands from the `backend/` directory with the virtualenv active.
-
 ```bash
-# Apply all pending migrations to the database (normal first-run)
+# Apply all pending migrations (first run)
 alembic upgrade head
 
-# After modifying a SQLAlchemy model, generate a new migration automatically
+# After modifying a SQLAlchemy model
 alembic revision --autogenerate -m "describe your change"
-
-# Then apply it
 alembic upgrade head
 
 # Roll back one migration
 alembic downgrade -1
-
-# Check current migration state
-alembic current
-
-# Show full migration history
-alembic history --verbose
 ```
-
-> **First run on an existing database**: if `voip_app.db` already has tables (e.g. created by a previous version), stamp it before upgrading:
-> ```bash
-> alembic stamp head
-> ```
 
 ---
 
-## Twilio setup walkthrough
+## Telnyx setup walkthrough
 
-### Step 1 — Buy a Twilio phone number
+### Step 1 — Get your API Key
 
-1. Log in to the [Twilio Console](https://www.twilio.com/console)
-2. Go to **Phone Numbers → Manage → Buy a number**
-3. Pick a **US number** with **Voice + SMS** capabilities
-4. Copy the number (e.g., `+15551234567`) — paste it into `.env` as `TWILIO_PHONE_NUMBER`
+1. Log in to the [Telnyx Portal](https://portal.telnyx.com)
+2. Go to **Auth → API Keys → Add API Key**
+3. Copy the key (starts with `KEY_V2_…`) → paste into `.env` as `TELNYX_API_KEY`
 
-### Step 2 — Get Account credentials
+### Step 2 — Get a phone number
 
-From the [Console home](https://www.twilio.com/console):
+1. Go to **Numbers → Buy Numbers**
+2. Search for a US number with **Voice + SMS**
+3. Purchase it and copy the number (e.g. `+15551234567`) → `TELNYX_PHONE_NUMBER`
 
-- **Account SID** → `TWILIO_ACCOUNT_SID`
-- **Auth Token** → `TWILIO_AUTH_TOKEN`
+### Step 3 — Create a Messaging Profile
 
-### Step 3 — Create an API Key (for the Voice JS SDK)
-
-1. Go to **Account → API keys & tokens → Create API key**
-2. Friendly name: `AlphaCall`, Type: **Standard**
-3. Copy **SID** (starts with `SK…`) → `TWILIO_API_KEY_SID`
-4. Copy **Secret** → `TWILIO_API_KEY_SECRET` ⚠️ (shown only once!)
+1. Go to **Messaging → Messaging Profiles → Add New Profile**
+2. Copy the **Profile ID** → `TELNYX_MESSAGING_PROFILE_ID`
+3. Assign your number to this profile
 
 ### Step 4 — Start ngrok
 
@@ -163,64 +133,58 @@ ngrok http 8000
 
 Copy the `https://abc123.ngrok-free.app` URL → paste into `backend/.env` as `PUBLIC_BACKEND_URL`.
 
-> ⚠️ The ngrok URL changes every restart on the free tier. Update it in `.env` and the Twilio Console each time.
+> The ngrok URL changes every restart on the free tier. Update it in `.env` and the Telnyx Portal each time.
 
-### Step 5 — Create a TwiML App
+### Step 5 — Create a TeXML Application (for call control)
 
-1. Go to **Voice → TwiML → TwiML Apps → Create new TwiML App**
-2. Friendly name: `AlphaCall`
-3. **Voice Configuration**:
-   - Request URL: `https://abc123.ngrok-free.app/api/twilio/outbound-call` — **POST**
-   - Status Callback URL: `https://abc123.ngrok-free.app/api/twilio/call-status` — **POST**
-4. Copy the **TwiML App SID** (starts with `AP…`) → `TWILIO_TWIML_APP_SID`
+1. Go to **Voice → TeXML → Create TeXML App**
+2. Name: `AlphaCall`
+3. **Voice**:
+   - Request URL: `https://abc123.ngrok-free.app/api/telnyx/outbound-call` — **POST**
+   - Status Callback URL: `https://abc123.ngrok-free.app/api/telnyx/call-status` — **POST**
+4. Copy the **Connection ID** → `TELNYX_CONNECTION_ID`
 
 ### Step 6 — Configure your phone number's webhooks
 
-1. Go to **Phone Numbers → Manage → Active numbers → [your number]**
-2. **Voice**: A call comes in → `https://abc123.ngrok-free.app/api/twilio/incoming-call` — **POST**
-3. **Voice**: Status changes → `https://abc123.ngrok-free.app/api/twilio/call-status` — **POST**
-4. **Messaging**: A message comes in → `https://abc123.ngrok-free.app/api/twilio/incoming-sms` — **POST**
+1. Go to **Numbers → My Numbers → [your number] → Edit**
+2. **Inbound calls** webhook: `https://abc123.ngrok-free.app/api/telnyx/incoming-call` — **POST**
+3. **Inbound SMS** webhook: `https://abc123.ngrok-free.app/api/telnyx/incoming-sms` — **POST**
+4. Assign the number to your TeXML connection
 
-### Step 7 — Verify your `backend/.env`
+### Step 7 — Webhook Public Key (for signature verification)
+
+1. Go to **Account → API Keys → Webhook Keys**
+2. Copy the **Public Key** → `TELNYX_PUBLIC_KEY`
+
+### Step 8 — Verify your `backend/.env`
 
 ```env
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your_auth_token
-TWILIO_API_KEY_SID=SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_API_KEY_SECRET=your_api_key_secret
-TWILIO_TWIML_APP_SID=APxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_PHONE_NUMBER=+15551234567
+TELNYX_API_KEY=KEY_V2_...
+TELNYX_PUBLIC_KEY=...
+TELNYX_PHONE_NUMBER=+15551234567
+TELNYX_CONNECTION_ID=...
+TELNYX_MESSAGING_PROFILE_ID=...
 
 SECRET_KEY=some-long-random-string
-DATABASE_URL=sqlite:///./voip_app.db
+DATABASE_URL=postgresql://alphacall:alphacall@localhost:5433/alphacall
 FRONTEND_URL=http://localhost:5173
 PUBLIC_BACKEND_URL=https://abc123.ngrok-free.app
-
-DEFAULT_USER_EMAIL=admin@example.com
-DEFAULT_USER_PASSWORD=changeme123
-DEFAULT_USER_NAME=Admin User
-
-# Optional — leave blank to disable Google login
-GOOGLE_CLIENT_ID=
 ```
 
 ---
 
 ## Testing checklist
 
-- [ ] Login works with default admin credentials
+- [ ] Login works
 - [ ] Sidebar shows "Ready to dial" (green dot)
 - [ ] Click **Call**, dial a number — outbound call connects
-- [ ] Call your Twilio number from a cell phone — incoming modal appears, Accept works
-- [ ] Hang up → call appears in **Inbox** (Unread tab by default)
-- [ ] Missed call captures voicemail with transcription under **Voicemails** tab
+- [ ] Call your Telnyx number from a cell phone — incoming modal appears, Accept works
+- [ ] Hang up → call appears in **Inbox**
+- [ ] Missed call captures voicemail under **Voicemails** tab
 - [ ] Send SMS from **Messages → New**, reply appears in thread
 - [ ] Create a contact, star it, call it from the contact card
 - [ ] Admin: Analytics dashboard shows KPI cards and charts
-- [ ] Admin: Filter analytics by department → by user
-- [ ] Admin: Export CSV — department rows when no filter, user rows when dept selected
-- [ ] Admin: Create a new user with a department in Admin Panel
-- [ ] Admin: Purchase / assign a Twilio number to a user
+- [ ] Admin: Purchase / assign a Telnyx number to a user
 - [ ] Toggle light and dark mode
 
 ---
@@ -232,19 +196,19 @@ AlphaCall/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── admin.py          # User & number management (admin only)
-│   │   │   ├── analytics.py      # KPI aggregations + per-user CSV export
-│   │   │   ├── auth.py           # Login, signup, Google OAuth
-│   │   │   ├── calls.py          # Call history CRUD
-│   │   │   ├── contacts.py       # Contacts CRUD
-│   │   │   ├── messages.py       # SMS threads
-│   │   │   └── twilio_webhooks.py
-│   │   ├── models/               # SQLAlchemy models (User, Call, Message, Contact, TwilioNumber)
-│   │   ├── schemas/              # Pydantic schemas
+│   │   │   ├── admin.py             # User & number management (admin only)
+│   │   │   ├── analytics.py         # KPI aggregations + CSV export
+│   │   │   ├── auth.py              # Login, signup
+│   │   │   ├── calls.py             # Call history CRUD + voice token
+│   │   │   ├── contacts.py          # Contacts CRUD
+│   │   │   ├── messages.py          # SMS threads
+│   │   │   └── telnyx_webhooks.py   # Telnyx TeXML webhook handlers
+│   │   ├── models/                  # SQLAlchemy models (User, Call, Message, Contact, PhoneNumber)
+│   │   ├── schemas/                 # Pydantic schemas
 │   │   ├── services/
-│   │   │   ├── deps.py           # Auth dependencies (get_current_user, require_admin)
-│   │   │   ├── security.py       # JWT + bcrypt
-│   │   │   └── twilio_service.py # Twilio number search/purchase/release
+│   │   │   ├── deps.py              # Auth dependencies
+│   │   │   ├── security.py          # JWT + bcrypt
+│   │   │   └── telnyx_service.py    # Telnyx number search/purchase/release/token
 │   │   ├── config.py
 │   │   ├── database.py
 │   │   └── main.py
@@ -252,38 +216,30 @@ AlphaCall/
 │   └── requirements.txt
 │
 └── frontend/
-    ├── public/
-    │   └── logo.png              # App logo (AlphaCall)
     ├── src/
     │   ├── components/
     │   │   ├── ActiveCallPanel.jsx
-    │   │   ├── Avatar.jsx
     │   │   ├── Dialer.jsx
     │   │   ├── IncomingCallModal.jsx
     │   │   └── Sidebar.jsx
     │   ├── context/
     │   │   ├── AuthContext.jsx
     │   │   ├── ThemeContext.jsx
-    │   │   └── TwilioContext.jsx
+    │   │   └── TelnyxContext.jsx     # Telnyx WebRTC SDK provider
     │   ├── pages/
-    │   │   ├── AdminPage.jsx     # User management + number inventory
+    │   │   ├── AdminPage.jsx
     │   │   ├── ContactsPage.jsx
-    │   │   ├── DashboardPage.jsx # Analytics with dept/user filters + CSV export
+    │   │   ├── DashboardPage.jsx
     │   │   ├── InboxPage.jsx
-    │   │   ├── LoginPage.jsx     # Email/password + Google OAuth + role selector
+    │   │   ├── LoginPage.jsx
     │   │   ├── MessagesPage.jsx
     │   │   └── SettingsPage.jsx
     │   ├── services/
-    │   │   └── api.js            # Axios client (authApi, callsApi, analyticsApi, adminApi…)
-    │   ├── styles/
-    │   │   └── index.css
-    │   ├── utils/
-    │   │   └── format.js
-    │   ├── App.jsx               # UserLayout + AdminLayout (separate route trees)
+    │   │   └── api.js
+    │   ├── App.jsx
     │   └── main.jsx
     ├── .env.example
     ├── package.json
-    ├── tailwind.config.js
     └── vite.config.js
 ```
 
@@ -292,15 +248,12 @@ AlphaCall/
 ## Common issues
 
 **"Connecting…" never becomes "Ready to dial"**
-Missing or wrong Twilio credentials in `backend/.env`. Double-check all 5 Twilio values and restart the backend.
+Missing or wrong `TELNYX_API_KEY` or `TELNYX_CONNECTION_ID` in `backend/.env`. Restart the backend after editing.
 
 **Incoming calls never reach the browser**
-- Verify **Phone Number → Voice → "A call comes in"** webhook points to your current ngrok URL
+- Verify your Telnyx number's inbound webhook points to your current ngrok URL
 - Check ngrok is still running
-- Watch FastAPI logs — you should see a POST to `/api/twilio/incoming-call`
-
-**"Application error. Please check your application logs."**
-Twilio couldn't reach the TwiML App's Request URL. Update it in the Twilio Console to your current ngrok URL.
+- Watch FastAPI logs — you should see a POST to `/api/telnyx/incoming-call`
 
 **CORS errors in browser console**
 Make sure `FRONTEND_URL` in `backend/.env` matches where the frontend is running (default `http://localhost:5173`).
@@ -308,22 +261,17 @@ Make sure `FRONTEND_URL` in `backend/.env` matches where the frontend is running
 **Voicemail audio won't play**
 The recording may still be processing — wait 30 seconds and refresh.
 
-**Google login not showing**
-Make sure `VITE_GOOGLE_CLIENT_ID` is set in `frontend/.env.local` and `GOOGLE_CLIENT_ID` is set in `backend/.env`, then restart both servers.
-
 ---
 
 ## Production notes
 
-- Replace SQLite with Postgres (`DATABASE_URL=postgresql://...`)
-- Use a real domain with HTTPS for `PUBLIC_BACKEND_URL` (no ngrok needed)
+- Use a real domain with HTTPS for `PUBLIC_BACKEND_URL`
 - Set a strong random `SECRET_KEY`: `openssl rand -hex 32`
-- Change the default admin password immediately after first login
-- Add rate-limiting to the API endpoints
-- Serve the frontend build via a CDN or reverse proxy
+- Set `DATABASE_URL` to your production PostgreSQL connection string
+- Add your production frontend URL to CORS origins in `backend/app/main.py`
 
 ---
 
 ## License
 
-MIT — feel free to use and modify.
+MIT

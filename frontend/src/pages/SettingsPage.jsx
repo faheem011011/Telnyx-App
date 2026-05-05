@@ -1,6 +1,6 @@
 import { Phone, Mail, User as UserIcon, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useTwilio } from '../context/TwilioContext';
+import { useTelnyx as useTwilio } from '../context/TelnyxContext';
 import { formatPhone } from '../utils/format';
 
 export default function SettingsPage() {
@@ -50,7 +50,7 @@ export default function SettingsPage() {
                 <div className="text-xs text-muted mt-0.5">
                   {deviceReady
                     ? 'Ready to make and receive calls'
-                    : 'Registering with Twilio…'}
+                    : 'Registering with Telnyx…'}
                 </div>
               )}
             </div>
@@ -61,13 +61,13 @@ export default function SettingsPage() {
         {user?.role === 'admin' && (
           <Section title="Resources">
             <a
-              href="https://www.twilio.com/console"
+              href="https://portal.telnyx.com"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-between p-4 rounded-xl hover:surface-tertiary transition-colors"
               style={{ background: 'rgb(var(--bg-secondary))' }}
             >
-              <span className="text-sm font-medium">Open Twilio Console</span>
+              <span className="text-sm font-medium">Open Telnyx Portal</span>
               <ExternalLink className="w-4 h-4 text-faint" />
             </a>
           </Section>

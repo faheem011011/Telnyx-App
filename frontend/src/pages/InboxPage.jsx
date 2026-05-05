@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { callsApi } from '../services/api';
-import { useTwilio } from '../context/TwilioContext';
+import { useTelnyx as useTwilio } from '../context/TelnyxContext';
 import { formatPhone, formatCallDate, formatDuration, toE164 } from '../utils/format';
 import Avatar from '../components/Avatar';
 

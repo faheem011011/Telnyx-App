@@ -555,7 +555,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
       const results = await adminApi.searchNumbers({ area_code: searchArea, limit: 10 });
       setSearchResults(results);
     } catch (err) {
-      setSearchError(err.response?.data?.detail || 'Search failed. Check your Twilio credentials.');
+      setSearchError(err.response?.data?.detail || 'Search failed. Check your Telnyx credentials.');
     } finally {
       setSearching(false);
     }
@@ -582,7 +582,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
       await adminApi.syncNumbers();
       onRefresh();
     } catch (err) {
-      setActionError(err.response?.data?.detail || 'Sync failed. Check your Twilio credentials.');
+      setActionError(err.response?.data?.detail || 'Sync failed. Check your Telnyx credentials.');
     } finally {
       setSyncing(false);
     }
@@ -602,7 +602,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
   };
 
   const handleRelease = async (numberId) => {
-    if (!window.confirm('Release this number from your Twilio account? This cannot be undone.')) return;
+    if (!window.confirm('Release this number from your Telnyx account? This cannot be undone.')) return;
     try {
       await adminApi.releaseNumber(numberId);
       onRefresh();
@@ -627,7 +627,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
         style={{ borderColor: 'rgb(var(--border-primary))', background: 'rgb(var(--bg-secondary))' }}
       >
         <h3 className="font-display font-semibold text-sm mb-1">Search & Purchase Numbers</h3>
-        <p className="text-xs text-muted mb-4">Search Twilio's available US numbers by area code and purchase directly.</p>
+        <p className="text-xs text-muted mb-4">Search Telnyx's available US numbers by area code and purchase directly.</p>
 
         <div className="flex gap-3 mb-4">
           <div className="relative flex-1">
@@ -701,7 +701,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
             className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            Sync from Twilio
+            Sync from Telnyx
           </button>
         </div>
 
@@ -711,7 +711,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
           </div>
         ) : (numbers || []).length === 0 ? (
           <div className="text-center py-12 text-muted text-sm rounded-xl border border-dashed" style={{ borderColor: 'rgb(var(--border-primary))' }}>
-            No numbers in inventory. Search and purchase above, or sync from Twilio.
+            No numbers in inventory. Search and purchase above, or sync from Telnyx.
           </div>
         ) : (
           <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgb(var(--border-primary))' }}>
@@ -812,7 +812,7 @@ export default function AdminPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-2xl font-display font-bold mb-1">Admin Panel</h1>
-          <p className="text-sm text-muted">Manage users, roles, departments, and Twilio phone number assignments.</p>
+          <p className="text-sm text-muted">Manage users, roles, departments, and Telnyx phone number assignments.</p>
         </div>
 
         {/* Tabs */}
