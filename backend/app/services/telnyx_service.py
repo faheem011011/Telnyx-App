@@ -26,31 +26,63 @@ def generate_voice_access_token(
     """Generate a short-lived Telnyx login token for the browser WebRTC SDK.
 
     Returns (token, credential_id, sip_username).
-    Pass existing_credential_id to reuse a previously created credential so the
-    user's SIP username stays stable across page reloads — required for inbound
-    call routing to reach the correct browser client.
+    Uses the Telnyx REST API directly because TelephonyCredential was removed
+    from the Python SDK in v2+.
     """
     _check_configured()
     if not settings.telnyx_connection_id:
         raise ValueError(
-            "TELNYX_CONNECTION_ID not set in .env. "
+            "TELNYX_CONNECTION_ID not set. "
             "Create a Credential Connection in the Telnyx portal and paste its ID."
         )
 
-    credential = None
+    headers = {
+        "Authorization": f"Bearer {settings.telnyx_api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    base = "https://api.telnyx.com/v2"
+
+    credential_id: str | None = None
+    sip_username: str | None = None
+
     if existing_credential_id:
         try:
-            credential = telnyx.TelephonyCredential.retrieve(existing_credential_id)
+            r = httpx.get(
+                f"{base}/telephony_credentials/{existing_credential_id}",
+                headers=headers,
+                timeout=10,
+            )
+            if r.status_code == 200:
+                data = r.json()["data"]
+                credential_id = data["id"]
+                sip_username = data.get("sip_username") or data.get("resource_name")
         except Exception:
-            credential = None
+            pass
 
-    if credential is None:
-        credential = telnyx.TelephonyCredential.create(
-            connection_id=settings.telnyx_connection_id,
+    if credential_id is None:
+        r = httpx.post(
+            f"{base}/telephony_credentials",
+            headers=headers,
+            json={"connection_id": str(settings.telnyx_connection_id)},
+            timeout=10,
         )
+        if not r.is_success:
+            raise ValueError(f"Telnyx credential create failed ({r.status_code}): {r.text}")
+        data = r.json()["data"]
+        credential_id = data["id"]
+        sip_username = data.get("sip_username") or data.get("resource_name")
 
-    token_response = credential.token()
-    return token_response["token"], credential.id, credential.sip_username
+    r = httpx.post(
+        f"{base}/telephony_credentials/{credential_id}/token",
+        headers=headers,
+        timeout=10,
+    )
+    if not r.is_success:
+        raise ValueError(f"Telnyx token create failed ({r.status_code}): {r.text}")
+
+    token = r.text.strip().strip('"')
+    return token, credential_id, sip_username
 
 
 def send_sms(to_number: str, body: str, from_number: str | None = None) -> dict:
