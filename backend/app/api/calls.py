@@ -60,8 +60,8 @@ def get_voice_token(
         token, cred_id, sip_username = generate_voice_access_token(
             existing_credential_id=current_user.telnyx_credential_id,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Telnyx token error: {e}")
 
     if current_user.telnyx_credential_id != cred_id or not current_user.telnyx_sip_username:
         current_user.telnyx_credential_id = cred_id
