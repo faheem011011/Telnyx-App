@@ -287,12 +287,11 @@ def build_outgoing_texml(to_number: str, caller_id: str | None = None) -> str:
             "No phone number assigned to this account. "
             "Ask an admin to assign a Telnyx number before making calls."
         )
-    caller = caller_id
     action = f"{settings.public_backend_url}/api/telnyx/call-status"
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
-        f'<Dial callerId="{caller}" answerOnBridge="true" action="{action}">'
+        f'<Dial callerId="{caller_id}" timeout="30" action="{action}">'
         f"<Number>{to_number}</Number>"
         "</Dial>"
         "</Response>"

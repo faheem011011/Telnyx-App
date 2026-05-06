@@ -137,6 +137,11 @@ export function TelnyxProvider({ children }) {
       if (!clientRef.current || !deviceReady) {
         throw new Error('Phone not ready. Try again in a moment.');
       }
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (_) {
+        throw new Error('Microphone access denied. Allow microphone access in your browser and try again.');
+      }
       const call = clientRef.current.newCall({
         destinationNumber: toNumber,
         callerNumber: user?.phone_number || '',
@@ -166,7 +171,15 @@ export function TelnyxProvider({ children }) {
   }, [incomingCall]);
 
   const hangup = useCallback(() => {
-    if (activeCall) activeCall.hangup();
+    if (!activeCall) return;
+    try {
+      activeCall.hangup();
+    } catch (err) {
+      console.error('[Telnyx] hangup() failed', err);
+      setActiveCall(null);
+      setActiveCallInfo(null);
+      setMuted(false);
+    }
   }, [activeCall]);
 
   const toggleMute = useCallback(() => {
