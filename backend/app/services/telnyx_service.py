@@ -183,17 +183,23 @@ def purchase_number(phone_number: str) -> dict:
 def list_owned_numbers() -> list[dict]:
     """List all phone numbers owned in Telnyx account."""
     _check_configured()
-    numbers = telnyx.PhoneNumber.list()
+    r = httpx.get(
+        "https://api.telnyx.com/v2/phone_numbers",
+        headers={"Authorization": f"Bearer {settings.telnyx_api_key}", "Accept": "application/json"},
+        params={"page[size]": 250},
+        timeout=15,
+    )
+    if not r.is_success:
+        raise ValueError(f"Telnyx list numbers failed ({r.status_code}): {r.text}")
+    items = r.json().get("data", [])
     return [
         {
-            "sid": str(n.id),
-            "phone_number": n.phone_number,
-            "friendly_name": n.phone_number,
-            "cap_voice": True,
-            "cap_sms": True,
-            "cap_mms": False,
+            "sid": str(n["id"]),
+            "phone_number": n["phone_number"],
+            "friendly_name": n.get("friendly_name") or n["phone_number"],
+            **_parse_features(n.get("features")),
         }
-        for n in numbers
+        for n in items
     ]
 
 
