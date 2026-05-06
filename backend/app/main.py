@@ -50,6 +50,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:5174",
         "https://call.alphabridgeconsulting.ai",
+        "https://phone.alphabridgeconsulting.ai",
     ],
     allow_credentials=True,
     allow_methods=["*"],
