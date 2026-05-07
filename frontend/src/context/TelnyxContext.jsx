@@ -22,9 +22,17 @@ const TELNYX_DEFAULTS = {
   sendDigit: () => {},
 };
 
+// All states that mean the call is over
+const TERMINAL_STATES = new Set(['hangup', 'destroy', 'purge']);
+
 export function TelnyxProvider({ children }) {
   const { user } = useAuth();
   const clientRef = useRef(null);
+  const audioRef = useRef(null);
+  // Track IDs of calls we've already answered to prevent the ringing
+  // notification firing again after answer() and re-showing the modal
+  const answeredCallIdRef = useRef(null);
+
   const [deviceReady, setDeviceReady] = useState(false);
   const [deviceError, setDeviceError] = useState(null);
   const [incomingCall, setIncomingCall] = useState(null);
@@ -34,6 +42,28 @@ export function TelnyxProvider({ children }) {
   const [recording, setRecording] = useState(false);
   const [tokenVersion, setTokenVersion] = useState(0);
   const refreshTimerRef = useRef(null);
+
+  // Attach a remote audio stream to the hidden <audio> element so the user
+  // can actually hear the other party. Without this, no audio plays even
+  // though WebRTC media negotiation succeeds.
+  const attachAudio = useCallback((stream) => {
+    const el = audioRef.current;
+    if (!el || !stream) return;
+    if (el.srcObject === stream) return;
+    el.srcObject = stream;
+    el.play().catch((err) => console.warn('[Telnyx] audio play blocked:', err));
+  }, []);
+
+  const clearCallState = useCallback(() => {
+    setActiveCall(null);
+    setActiveCallInfo(null);
+    setMuted(false);
+    setRecording(false);
+    // Release the audio stream
+    if (audioRef.current) {
+      audioRef.current.srcObject = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -72,30 +102,37 @@ export function TelnyxProvider({ children }) {
           const call = notification.call;
           const state = call?.state;
 
+          // Attach audio stream whenever it becomes available (covers early
+          // ringback, active, and any intermediate states with media)
+          if (call?.remoteStream) attachAudio(call.remoteStream);
+
           if (state === 'ringing' && call.direction === 'inbound') {
-            if (!cancelled) setIncomingCall(call);
-            call.on('hangup', () => {
-              if (!cancelled) setIncomingCall((prev) => (prev?.id === call.id ? null : prev));
-            });
+            // Skip if we already answered this call — the SDK re-fires ringing
+            // after answer() which would re-show the incoming call modal
+            if (!cancelled && answeredCallIdRef.current !== call.id) {
+              setIncomingCall(call);
+            }
           }
 
           if (state === 'active') {
             if (!cancelled) {
+              // Update activeCall to latest call object and mark connected.
+              // We update regardless of callId match because the SDK may assign
+              // a new server-side call_control_id after the call is answered.
+              setActiveCall(call);
               setActiveCallInfo((prev) =>
-                prev?.callId === call.id
-                  ? { ...prev, startedAt: Date.now(), connected: true }
-                  : prev
+                prev ? { ...prev, startedAt: prev.startedAt || Date.now(), connected: true } : prev
               );
             }
           }
 
-          if (state === 'hangup' || state === 'destroy') {
+          if (TERMINAL_STATES.has(state)) {
             if (!cancelled) {
               setIncomingCall((prev) => (prev?.id === call.id ? null : prev));
-              setActiveCall((prev) => (prev?.id === call.id ? null : prev));
-              setActiveCallInfo((prev) => (prev?.callId === call.id ? null : prev));
-              setMuted(false);
-              setRecording(false);
+              // Clear active call unconditionally — only one call can be active,
+              // and if this terminal event fired the call is definitively over.
+              clearCallState();
+              answeredCallIdRef.current = null;
             }
           }
         });
@@ -130,7 +167,7 @@ export function TelnyxProvider({ children }) {
       clientRef.current = null;
       setDeviceReady(false);
     };
-  }, [user, tokenVersion]);
+  }, [user, tokenVersion, attachAudio, clearCallState]);
 
   const makeCall = useCallback(
     async (toNumber) => {
@@ -145,6 +182,9 @@ export function TelnyxProvider({ children }) {
       const call = clientRef.current.newCall({
         destinationNumber: toNumber,
         callerNumber: user?.phone_number || '',
+        // Pass the audio element so the SDK can attach remote audio itself
+        // as a fallback in addition to our manual stream handling above
+        remoteElement: audioRef.current || undefined,
       });
       setActiveCall(call);
       setActiveCallInfo({ callId: call.id, number: toNumber, direction: 'outbound', startedAt: Date.now(), connected: false });
@@ -157,7 +197,12 @@ export function TelnyxProvider({ children }) {
   const acceptIncoming = useCallback(() => {
     if (!incomingCall) return;
     const from = incomingCall.options?.remoteCallerNumber || incomingCall.options?.destinationNumber || 'Unknown';
-    incomingCall.answer();
+    // Record that we answered this call BEFORE calling answer() so the ringing
+    // re-notification guard fires correctly
+    answeredCallIdRef.current = incomingCall.id;
+    incomingCall.answer({
+      remoteElement: audioRef.current || undefined,
+    });
     setActiveCall(incomingCall);
     setActiveCallInfo({ callId: incomingCall.id, number: from, direction: 'inbound', startedAt: Date.now(), connected: true });
     setIncomingCall(null);
@@ -166,21 +211,21 @@ export function TelnyxProvider({ children }) {
 
   const rejectIncoming = useCallback(() => {
     if (!incomingCall) return;
-    incomingCall.hangup();
+    try { incomingCall.hangup(); } catch (_) {}
     setIncomingCall(null);
   }, [incomingCall]);
 
   const hangup = useCallback(() => {
-    if (!activeCall) return;
-    try {
-      activeCall.hangup();
-    } catch (err) {
-      console.error('[Telnyx] hangup() failed', err);
-      setActiveCall(null);
-      setActiveCallInfo(null);
-      setMuted(false);
+    // Clear UI state immediately — don't wait for the SDK hangup event.
+    // If the call is already dead (e.g. Telnyx dropped it due to no media),
+    // the SDK event may never arrive, leaving the panel stuck on screen.
+    const callToHang = activeCall;
+    clearCallState();
+    answeredCallIdRef.current = null;
+    if (callToHang) {
+      try { callToHang.hangup(); } catch (_) {}
     }
-  }, [activeCall]);
+  }, [activeCall, clearCallState]);
 
   const toggleMute = useCallback(() => {
     if (!activeCall) return;
@@ -226,7 +271,14 @@ export function TelnyxProvider({ children }) {
     sendDigit,
   };
 
-  return <TelnyxContext.Provider value={value}>{children}</TelnyxContext.Provider>;
+  return (
+    <TelnyxContext.Provider value={value}>
+      {/* Hidden audio element — the remote party's voice plays through this.
+          autoPlay + playsInline are required for mobile browsers. */}
+      <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
+      {children}
+    </TelnyxContext.Provider>
+  );
 }
 
 export const useTelnyx = () => {

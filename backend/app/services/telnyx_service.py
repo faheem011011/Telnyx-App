@@ -310,7 +310,7 @@ def build_incoming_texml(sip_username: str) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
-        f'<Dial answerOnBridge="true" timeout="25" action="{action}">'
+        f'<Dial timeout="25" action="{action}">'
         f"<Sip>{sip_uri}</Sip>"
         "</Dial>"
         "</Response>"
