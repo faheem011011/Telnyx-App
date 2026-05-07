@@ -294,7 +294,7 @@ def build_outgoing_texml(to_number: str, caller_id: str | None = None) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
-        f'<Dial callerId="{caller_id}" timeout="30" action="{action}">'
+        f'<Dial callerId="{caller_id}" timeout="60" action="{action}">'
         f"<Number>{to_number}</Number>"
         "</Dial>"
         "</Response>"
@@ -313,7 +313,7 @@ def build_incoming_texml(sip_username: str) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
-        f'<Dial timeout="25" action="{action}">'
+        f'<Dial timeout="40" action="{action}">'
         f"<Sip>{sip_uri}</Sip>"
         "</Dial>"
         "</Response>"
