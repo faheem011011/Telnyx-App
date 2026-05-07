@@ -56,7 +56,9 @@ def generate_voice_access_token(
             if r.status_code == 200:
                 data = r.json()["data"]
                 credential_id = data["id"]
-                sip_username = data.get("sip_username") or data.get("resource_name")
+                raw = data.get("sip_username") or data.get("resource_name") or ""
+                # Strip @domain suffix if Telnyx returns a full SIP address
+                sip_username = raw.split("@")[0] if raw else None
         except Exception:
             pass
 
@@ -71,7 +73,8 @@ def generate_voice_access_token(
             raise ValueError(f"Telnyx credential create failed ({r.status_code}): {r.text}")
         data = r.json()["data"]
         credential_id = data["id"]
-        sip_username = data.get("sip_username") or data.get("resource_name")
+        raw = data.get("sip_username") or data.get("resource_name") or ""
+        sip_username = raw.split("@")[0] if raw else None
 
     r = httpx.post(
         f"{base}/telephony_credentials/{credential_id}/token",

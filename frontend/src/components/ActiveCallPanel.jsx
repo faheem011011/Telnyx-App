@@ -56,7 +56,7 @@ function ControlBtn({ onClick, active, activeColor = '#2563eb', children, title,
 }
 
 export default function ActiveCallPanel() {
-  const { activeCall, activeCallInfo, muted, toggleMute, hangup, sendDigit, recording, toggleRecording } = useTwilio();
+  const { activeCall, activeCallInfo, activeCallSdkState, muted, toggleMute, hangup, sendDigit, recording, toggleRecording } = useTwilio();
   const [elapsed, setElapsed]       = useState(0);
   const [showKeypad, setShowKeypad] = useState(false);
 
@@ -71,9 +71,13 @@ export default function ActiveCallPanel() {
   if (!activeCall || !activeCallInfo) return null;
 
   const { number, direction, connected } = activeCallInfo;
-  const statusLabel = !connected
-    ? direction === 'outbound' ? 'Calling…' : 'Connecting…'
-    : formatDuration(elapsed);
+  const statusLabel = connected
+    ? formatDuration(elapsed)
+    : activeCallSdkState === 'ringing' && direction === 'outbound'
+      ? 'Ringing…'
+      : direction === 'outbound'
+        ? 'Calling…'
+        : 'Connecting…';
 
   return (
     <div

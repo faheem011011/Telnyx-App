@@ -8,7 +8,12 @@ export default function IncomingCallModal() {
 
   if (!incomingCall) return null;
 
-  const from = incomingCall.options?.remoteCallerNumber || incomingCall.options?.destinationNumber || 'Unknown caller';
+  const from =
+    incomingCall.options?.remoteCallerNumber ||
+    incomingCall.options?.callerNumber       ||
+    incomingCall.options?.displayName        ||
+    incomingCall.options?.destinationNumber  ||
+    'Unknown caller';
 
   return (
     <div
