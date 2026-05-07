@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24  # 24 hours
     algorithm: str = "HS256"
 
+    # Initial setup token — gates POST /api/auth/setup. Empty disables endpoint.
+    initial_setup_token: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -52,8 +52,16 @@ export default function Dialer({ onClose, defaultNumber = '' }) {
     triggerFlash(k);
   };
 
+  const digitsOnly = number.replace(/[^0-9]/g, '');
+  const hasEnoughDigits = digitsOnly.length >= 7;
+  const canCall = hasEnoughDigits && deviceReady && !calling;
+
   const handleCall = async () => {
-    if (calling || !number || !deviceReady) return;
+    if (calling || !deviceReady) return;
+    if (!hasEnoughDigits) {
+      setError('Enter at least 7 digits.');
+      return;
+    }
     setError(null);
     setCalling(true);
     try {
@@ -64,8 +72,6 @@ export default function Dialer({ onClose, defaultNumber = '' }) {
       setCalling(false);
     }
   };
-
-  const canCall = !!number && deviceReady && !calling;
 
   return (
     <div

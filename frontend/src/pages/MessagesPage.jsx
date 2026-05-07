@@ -20,7 +20,15 @@ export default function MessagesPage() {
     if (showSpinner) setLoading(true);
     messagesApi
       .conversations()
-      .then(setConversations)
+      .then((next) => {
+        setConversations((prev) => {
+          const byKey = new Map(prev.map((c) => [c.phone_number, c]));
+          for (const c of next) byKey.set(c.phone_number, c);
+          // Drop any conversations that no longer exist server-side
+          const validKeys = new Set(next.map((c) => c.phone_number));
+          return [...byKey.values()].filter((c) => validKeys.has(c.phone_number));
+        });
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -247,7 +255,19 @@ function ThreadView({ phoneNumber, onSent }) {
     if (showSpinner) setLoading(true);
     messagesApi
       .thread(phoneNumber)
-      .then(setMessages)
+      .then((next) => {
+        setMessages((prev) => {
+          const optimistic = prev.filter((m) => typeof m.id === 'string' && m.id.startsWith('opt-'));
+          const merged = [...next];
+          for (const opt of optimistic) {
+            // Keep optimistic entries that haven't been confirmed yet
+            // (no matching body+direction in next)
+            const confirmed = next.some((m) => m.body === opt.body && m.direction === opt.direction);
+            if (!confirmed) merged.push(opt);
+          }
+          return merged.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        });
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [phoneNumber]);

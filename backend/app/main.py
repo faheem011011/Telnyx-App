@@ -1,4 +1,7 @@
 """FastAPI application entry point."""
+import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -11,12 +14,48 @@ from slowapi.errors import RateLimitExceeded
 from app.api import analytics, auth, calls, contacts, messages, telnyx_webhooks
 from app.api import admin
 from app.config import settings
+from app.database import engine
 from app.limiter import limiter
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+log = logging.getLogger("alphacall.access")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
+    log.info("AlphaCall API starting up")
+    try:
+        yield
+    finally:
+        log.info("AlphaCall API shutting down — disposing engine pool")
+        engine.dispose()
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+        start = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            log.exception(
+                "request_failed method=%s path=%s request_id=%s duration_ms=%d",
+                request.method, request.url.path, request_id, duration_ms,
+            )
+            raise
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        log.info(
+            "request method=%s path=%s status=%d duration_ms=%d request_id=%s",
+            request.method, request.url.path, response.status_code, duration_ms, request_id,
+        )
+        response.headers["X-Request-ID"] = request_id
+        return response
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -27,6 +66,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "connect-src 'self' wss://*.telnyx.com https://*.telnyx.com https://api.telnyx.com; "
+            "media-src 'self' https://api.telnyx.com blob:; "
+            "img-src 'self' data: blob:; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        # WebRTC needs microphone permission for self; camera disabled.
+        response.headers["Permissions-Policy"] = "microphone=(self), camera=()"
         return response
 
 
@@ -44,6 +96,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -53,8 +106,8 @@ app.add_middleware(
         "https://phone.alphabridgeconsulting.ai",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Setup-Token"],
 )
 
 app.include_router(auth.router)

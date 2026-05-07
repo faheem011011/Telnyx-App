@@ -52,7 +52,7 @@ export const authApi = {
 // Calls
 // ============================================================
 export const callsApi = {
-  getToken: () => api.get('/api/calls/token').then((r) => r.data),
+  getToken: () => api.get('/api/calls/token', { timeout: 30000 }).then((r) => r.data),
   list: (filter = 'all', search = '') =>
     api.get('/api/calls', { params: { filter, search: search || undefined } }).then((r) => r.data),
   get: (id) => api.get(`/api/calls/${id}`).then((r) => r.data),
@@ -60,10 +60,10 @@ export const callsApi = {
   update: (id, data) => api.patch(`/api/calls/${id}`, data).then((r) => r.data),
   markAllRead: () => api.post('/api/calls/mark-all-read').then((r) => r.data),
   remove: (id) => api.delete(`/api/calls/${id}`).then((r) => r.data),
-  startRecording: () =>
-    api.post('/api/calls/recording/start').then((r) => r.data),
-  stopRecording: () =>
-    api.post('/api/calls/recording/stop').then((r) => r.data),
+  startRecording: (callSid) =>
+    api.post('/api/calls/recording/start', { call_sid: callSid }).then((r) => r.data),
+  stopRecording: (callSid) =>
+    api.post('/api/calls/recording/stop', { call_sid: callSid }).then((r) => r.data),
 };
 
 // ============================================================

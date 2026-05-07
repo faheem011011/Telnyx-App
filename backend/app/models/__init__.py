@@ -1,7 +1,7 @@
 """Database models."""
 from datetime import datetime, timezone
 from typing import Any
-from sqlalchemy import JSON, String, Integer, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import JSON, String, Integer, DateTime, ForeignKey, Text, Boolean, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -28,7 +28,9 @@ class User(Base):
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     telnyx_credential_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     telnyx_sip_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     contacts: Mapped[list["Contact"]] = relationship(
         "Contact", back_populates="owner", cascade="all, delete-orphan"
@@ -50,7 +52,7 @@ class User(Base):
 class PhoneNumber(Base):
     """Telnyx phone number — purchased and optionally assigned to a user."""
 
-    __tablename__ = "twilio_numbers"
+    __tablename__ = "phone_numbers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     sid: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
@@ -101,7 +103,7 @@ class Call(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     call_sid: Mapped[str | None] = mapped_column(
-        "twilio_call_sid", String(64), unique=True, index=True, nullable=True
+        String(64), unique=True, index=True, nullable=True
     )
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
     from_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -121,6 +123,12 @@ class Call(Base):
 
     owner: Mapped["User"] = relationship("User", back_populates="calls")
 
+    __table_args__ = (
+        Index("ix_calls_owner_started", "owner_id", "started_at"),
+        Index("ix_calls_owner_status", "owner_id", "status"),
+        Index("ix_calls_owner_direction_started", "owner_id", "direction", "started_at"),
+    )
+
 
 class Message(Base):
     """SMS/MMS message record."""
@@ -130,7 +138,7 @@ class Message(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     message_sid: Mapped[str | None] = mapped_column(
-        "twilio_message_sid", String(64), unique=True, index=True, nullable=True
+        String(64), unique=True, index=True, nullable=True
     )
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
     from_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -144,6 +152,11 @@ class Message(Base):
     )
 
     owner: Mapped["User"] = relationship("User", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_messages_owner_created", "owner_id", "created_at"),
+        Index("ix_messages_owner_direction_read", "owner_id", "direction", "is_read"),
+    )
 
 
 class AuditLog(Base):
@@ -194,3 +207,17 @@ class PasswordResetToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class WebhookEvent(Base):
+    """Telnyx webhook event — recorded for idempotency."""
+    __tablename__ = "webhook_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    telnyx_event_id: Mapped[str] = mapped_column(
+        String(128), unique=True, nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )

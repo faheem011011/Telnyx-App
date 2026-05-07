@@ -9,8 +9,10 @@ export default defineConfig({
     allowedHosts: [
       'localhost',
       '127.0.0.1',
-      // Add your ngrok URL here when using Twilio webhooks locally, e.g.:
-      // 'your-subdomain.ngrok-free.app',
+      // For local Telnyx webhook testing via a tunnel, set VITE_DEV_HOST to
+      // your tunnel hostname (e.g. 'your-subdomain.ngrok-free.app') so it
+      // doesn't have to be committed.
+      ...(process.env.VITE_DEV_HOST ? [process.env.VITE_DEV_HOST] : []),
     ],
     proxy: {
       '/api': 'http://localhost:8000',

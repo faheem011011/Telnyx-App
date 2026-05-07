@@ -30,8 +30,6 @@ export default function LoginPage() {
     }
   };
 
-  const removeReadOnly = (e) => e.target.removeAttribute('readOnly');
-
   const fields = [
     {
       id: 'email',
@@ -39,9 +37,8 @@ export default function LoginPage() {
       required: true,
       type: 'email',
       placeholder: 'Enter your email address',
-      autoComplete: 'off',
+      autoComplete: 'email',
       onChange: (e) => setEmail(e.target.value),
-      inputProps: { readOnly: true, onFocus: removeReadOnly },
     },
     {
       id: 'password',
@@ -49,9 +46,8 @@ export default function LoginPage() {
       required: true,
       type: 'password',
       placeholder: 'Enter your password',
-      autoComplete: 'new-password',
+      autoComplete: 'current-password',
       onChange: (e) => setPassword(e.target.value),
-      inputProps: { readOnly: true, onFocus: removeReadOnly },
     },
   ];
 

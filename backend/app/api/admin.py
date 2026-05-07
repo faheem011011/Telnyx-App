@@ -1,5 +1,9 @@
 """Admin-only endpoints: user management, Telnyx phone number management, audit log."""
+import logging
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -19,13 +23,15 @@ from app.schemas import (
 )
 from app.services.audit import get_client_ip, log_audit
 from app.services.deps import require_admin
-from app.services.security import hash_password
+from app.services.security import bump_token_version, hash_password
 from app.services.telnyx_service import (
     list_owned_numbers,
     purchase_number,
     release_number,
     search_available_numbers,
 )
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -86,7 +92,7 @@ def create_user(
     try:
         send_verification_email(user.email, verify_url)
     except Exception:
-        pass
+        log.exception("Best-effort verification email send failed for new user_id=%s", user.id)
 
     return UserWithNumbersOut.model_validate(user)
 
@@ -122,6 +128,7 @@ def update_user(
     if payload.password is not None:
         changes["password"] = "reset"
         user.hashed_password = hash_password(payload.password)
+        bump_token_version(user)
 
     if changes:
         log_audit(
@@ -154,9 +161,16 @@ def delete_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    deleted_info = {"email": user.email, "name": user.name, "role": user.role}
+    deleted_info = {
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "action": "soft_delete",
+    }
 
-    db.delete(user)
+    user.is_active = False
+    user.deleted_at = datetime.now(timezone.utc)
+    bump_token_version(user)
 
     log_audit(
         db, current_admin,
@@ -189,7 +203,7 @@ def resend_verification(
     try:
         send_verification_email(user.email, verify_url)
     except Exception:
-        pass
+        log.exception("Best-effort resend verification email failed for user_id=%s", user.id)
 
     log_audit(
         db, current_admin,
@@ -228,34 +242,52 @@ def sync_numbers(
 ) -> list[PhoneNumberOut]:
     try:
         owned = list_owned_numbers()
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+    except Exception:
+        log.exception("Telnyx list_owned_numbers failed during sync")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Number sync service unavailable. Please try again or contact support.",
+        )
 
     synced = []
     for n in owned:
         # Match by phone_number first (stable across sid format changes),
         # then fall back to sid. This prevents IntegrityError when the DB
         # has a different sid format (E.164 vs UUID) than what the API returns.
-        existing = (
-            db.query(PhoneNumber)
-            .filter(PhoneNumber.phone_number == n["phone_number"])
-            .first()
-        )
-        if existing is None:
-            tn = PhoneNumber(
-                sid=n["sid"],
-                phone_number=n["phone_number"],
-                friendly_name=n["friendly_name"],
-                cap_voice=n["cap_voice"],
-                cap_sms=n["cap_sms"],
-                cap_mms=n["cap_mms"],
+        # M-19: per-number try/except IntegrityError so a duplicate sid (rare
+        # but possible if Telnyx returns dupes) is logged + skipped instead of
+        # nuking the entire sync.
+        try:
+            existing = (
+                db.query(PhoneNumber)
+                .filter(PhoneNumber.phone_number == n["phone_number"])
+                .first()
             )
-            db.add(tn)
-            synced.append(tn)
-        else:
-            # Update sid to the canonical resource ID returned by the API
-            existing.sid = n["sid"]
-            synced.append(existing)
+            if existing is None:
+                tn = PhoneNumber(
+                    sid=n["sid"],
+                    phone_number=n["phone_number"],
+                    friendly_name=n["friendly_name"],
+                    cap_voice=n["cap_voice"],
+                    cap_sms=n["cap_sms"],
+                    cap_mms=n["cap_mms"],
+                )
+                db.add(tn)
+                db.flush()
+                synced.append(tn)
+            else:
+                # Update sid to the canonical resource ID returned by the API
+                existing.sid = n["sid"]
+                db.flush()
+                synced.append(existing)
+        except IntegrityError:
+            db.rollback()
+            log.warning(
+                "Sync skipped duplicate sid=%s phone=%s",
+                n.get("sid"),
+                n.get("phone_number"),
+            )
+            continue
 
     log_audit(
         db, current_admin,
@@ -269,16 +301,16 @@ def sync_numbers(
         try:
             db.refresh(tn)
         except Exception:
-            pass
+            log.exception("Failed to refresh PhoneNumber row id=%s after sync", getattr(tn, "id", None))
 
     return [PhoneNumberOut.model_validate(n) for n in synced]
 
 
 @router.get("/numbers/search", response_model=list[NumberSearchResult])
 def search_numbers(
-    area_code: str = Query("", description="3-digit US area code"),
+    area_code: str = Query("", pattern=r"^[0-9]{0,3}$", description="3-digit US area code"),
     country: str = Query("US"),
-    contains: str = Query("", description="Pattern to match, e.g. 555"),
+    contains: str = Query("", pattern=r"^[0-9]{0,15}$", description="Digit pattern to match, e.g. 555"),
     limit: int = Query(10, le=30),
     _: User = Depends(require_admin),
 ) -> list[NumberSearchResult]:
@@ -289,12 +321,17 @@ def search_numbers(
             contains=contains,
             limit=limit,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        log.exception("Telnyx number search misconfiguration")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Number search service unavailable. Please try again or contact support.",
+        )
+    except Exception:
+        log.exception("Telnyx number search failed")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Telnyx error: {e}",
+            detail="Number search service unavailable. Please try again or contact support.",
         )
     return [NumberSearchResult(**r) for r in results]
 
@@ -317,12 +354,17 @@ def buy_number(
 
     try:
         result = purchase_number(payload.phone_number)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        log.exception("Telnyx purchase_number misconfiguration for %s", payload.phone_number)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Number purchase service unavailable. Please try again or contact support.",
+        )
+    except Exception:
+        log.exception("Telnyx purchase_number failed for %s", payload.phone_number)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Telnyx purchase failed: {e}",
+            detail="Number purchase service unavailable. Please try again or contact support.",
         )
 
     tn = PhoneNumber(
@@ -365,16 +407,48 @@ def assign_number(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    # M-18: clear any other user whose users.phone_number still points at this
+    # number so we don't leave a stale reverse-mapping. Cover both:
+    #  (a) a previous assignee on this PhoneNumber row (tn.assigned_to_user_id)
+    #  (b) any other user whose users.phone_number happens to match (defensive)
+    cleared_user_ids: list[int] = []
+    previous_assignee_id = tn.assigned_to_user_id
+    if previous_assignee_id and previous_assignee_id != payload.user_id:
+        prev = db.query(User).filter(User.id == previous_assignee_id).first()
+        if prev and prev.phone_number == tn.phone_number:
+            prev.phone_number = None
+            cleared_user_ids.append(prev.id)
+
+    stale_users = (
+        db.query(User)
+        .filter(
+            User.phone_number == tn.phone_number,
+            User.id != payload.user_id,
+        )
+        .all()
+    )
+    for stale in stale_users:
+        if stale.id in cleared_user_ids:
+            continue
+        stale.phone_number = None
+        cleared_user_ids.append(stale.id)
+
     tn.assigned_to_user_id = payload.user_id
     if not user.phone_number:
         user.phone_number = tn.phone_number
+
+    audit_detail = {"assigned_to_user_id": user.id, "assigned_to_email": user.email}
+    if cleared_user_ids:
+        audit_detail["cleared_user_ids"] = cleared_user_ids
+    if previous_assignee_id and previous_assignee_id != payload.user_id:
+        audit_detail["previous_assigned_to_user_id"] = previous_assignee_id
 
     log_audit(
         db, current_admin,
         action="number.assign",
         resource_type="number",
         resource_id=tn.phone_number,
-        detail={"assigned_to_user_id": user.id, "assigned_to_email": user.email},
+        detail=audit_detail,
         ip_address=get_client_ip(request),
     )
     db.commit()
@@ -423,11 +497,23 @@ def delete_number(
     released_info = {"phone_number": tn.phone_number, "sid": tn.sid}
 
     try:
-        release_number(tn.sid)
-    except Exception as e:
+        released = release_number(tn.sid)
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("Telnyx release_number failed for sid=%s", tn.sid)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Telnyx release failed: {e}",
+            detail="Number release service unavailable. Please try again or contact support.",
+        )
+
+    if not released:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Number not found in Telnyx account; refusing to delete local row "
+                "out of sync. Sync first via /api/admin/numbers/sync."
+            ),
         )
 
     db.delete(tn)

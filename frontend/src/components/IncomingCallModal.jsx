@@ -6,42 +6,61 @@ import Avatar from './Avatar';
 
 // Play a US-standard dual-tone ring (440 Hz + 480 Hz, 2 s on / 4 s off)
 // using the Web Audio API — no audio file required.
+//
+// Browser limitations:
+//   Some browsers (Safari < 14) require a user gesture before AudioContext
+//   can play; in that case the modal will appear silently. The visual ring
+//   still pulses to draw attention.
 function useRingtone() {
   useEffect(() => {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-
-    const ctx = new AC();
     let active = true;
     let nextTimer = null;
+    let ctx = null;
 
-    const ring = () => {
-      if (!active) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) {
+        console.warn('[Ringtone] AudioContext unavailable; modal still active');
+        return;
+      }
 
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.9);
-      gain.connect(ctx.destination);
+      ctx = new AC();
 
-      [440, 480].forEach((freq) => {
-        const osc = ctx.createOscillator();
-        osc.frequency.value = freq;
-        osc.connect(gain);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 2);
-      });
+      const ring = () => {
+        if (!active) return;
 
-      // 2 s ring + 4 s silence = 6 s cycle
-      nextTimer = setTimeout(ring, 6_000);
-    };
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.9);
+        gain.connect(ctx.destination);
 
-    // ctx may be suspended until the first user gesture — resume it silently
-    ctx.resume().then(ring).catch(() => {});
+        [440, 480].forEach((freq) => {
+          const osc = ctx.createOscillator();
+          osc.frequency.value = freq;
+          osc.connect(gain);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 2);
+        });
+
+        // 2 s ring + 4 s silence = 6 s cycle
+        nextTimer = setTimeout(ring, 6_000);
+      };
+
+      // ctx may be suspended until the first user gesture — resume it silently.
+      // On Safari < 14 (no prior gesture) this rejects; degrade gracefully.
+      ctx.resume()
+        .then(ring)
+        .catch((err) => console.warn('[Ringtone] AudioContext blocked:', err));
+    } catch (err) {
+      console.warn('Ringtone unavailable on this browser; modal still active', err);
+    }
 
     return () => {
       active = false;
       clearTimeout(nextTimer);
-      try { ctx.close(); } catch (_) {}
+      if (ctx) {
+        try { ctx.close(); } catch (e) { console.warn('[Ringtone] ctx.close failed', e); }
+      }
     };
   }, []); // runs once on mount (component only mounts while incomingCall is set)
 }
@@ -52,11 +71,14 @@ export default function IncomingCallModal() {
 
   if (!incomingCall) return null;
 
+  // For inbound calls the Telnyx WebRTC SDK exposes the caller's E.164 on
+  // `incomingCall.from`. Never fall back to `destinationNumber` — that is
+  // the *user's own* number and would mislabel the caller as themselves.
   const from =
     incomingCall.options?.remoteCallerNumber ||
     incomingCall.options?.callerNumber       ||
+    incomingCall.from                        ||
     incomingCall.options?.displayName        ||
-    incomingCall.options?.destinationNumber  ||
     'Unknown caller';
 
   return (

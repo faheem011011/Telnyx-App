@@ -24,18 +24,28 @@ def get_current_user(
     if not token:
         raise credentials_exc
 
-    user_id = decode_access_token(token)
-    if user_id is None:
+    decoded = decode_access_token(token)
+    if decoded is None:
         raise credentials_exc
+
+    user_id, token_version = decoded
 
     try:
         uid = int(user_id)
     except (TypeError, ValueError):
         raise credentials_exc
 
-    user = db.query(User).filter(User.id == uid, User.is_active == True).first()
+    user = db.query(User).filter(
+        User.id == uid,
+        User.is_active == True,  # noqa: E712
+        User.deleted_at.is_(None),
+    ).first()
     if user is None:
         raise credentials_exc
+
+    if (user.token_version or 0) != token_version:
+        raise credentials_exc
+
     return user
 
 

@@ -1,13 +1,34 @@
 """Telnyx client wrapper — voice calls, SMS, and phone number management."""
+import logging
+import re
+from xml.sax.saxutils import escape, quoteattr
+
 import httpx
 import telnyx
 
 from app.config import settings
 
+log = logging.getLogger(__name__)
+
+# Validation regexes for TeXML interpolated values (C-02).
+#   _PHONE_RE — used for "to_number" and "caller_id" (E.164-ish).
+#   _SIP_USER_RE — looser; SIP usernames may not be E.164.
+_PHONE_RE = re.compile(r"^\+?[0-9]{7,15}$")
+_SIP_USER_RE = re.compile(r"^\+?[A-Za-z0-9._-]{3,64}$")
+
 
 def _init():
     if settings.telnyx_api_key:
         telnyx.api_key = settings.telnyx_api_key
+    # H-15: warn if public_backend_url is not HTTPS — recording webhook URLs
+    # rely on this and Telnyx will refuse non-HTTPS callbacks.
+    pbu = settings.public_backend_url or ""
+    if pbu and not pbu.startswith("https://"):
+        log.warning(
+            "settings.public_backend_url=%r is not HTTPS — Telnyx recording "
+            "webhooks (call_record_start) may fail until this is fixed.",
+            pbu,
+        )
 
 
 _init()
@@ -46,12 +67,16 @@ def generate_voice_access_token(
     credential_id: str | None = None
     sip_username: str | None = None
 
+    # M-09: each call now uses timeout=15 (worst-case ~45s, but typical ~3s).
+    # Frontend axios timeout is 30s, so the worst-path is intentionally tight on
+    # any single hop — failures surface fast via raise_for_status() rather than
+    # waiting on the next stage.
     if existing_credential_id:
         try:
             r = httpx.get(
                 f"{base}/telephony_credentials/{existing_credential_id}",
                 headers=headers,
-                timeout=10,
+                timeout=15,
             )
             if r.status_code == 200:
                 data = r.json()["data"]
@@ -60,15 +85,20 @@ def generate_voice_access_token(
                 # Strip @domain suffix if Telnyx returns a full SIP address
                 sip_username = raw.split("@")[0] if raw else None
         except Exception:
-            pass
+            log.exception(
+                "Failed to look up existing Telnyx credential %s; will create a new one",
+                existing_credential_id,
+            )
 
     if credential_id is None:
         r = httpx.post(
             f"{base}/telephony_credentials",
             headers=headers,
             json={"connection_id": str(settings.telnyx_connection_id)},
-            timeout=10,
+            timeout=15,
         )
+        # M-09: surface failures immediately rather than waiting for the next call.
+        r.raise_for_status()
         if not r.is_success:
             raise ValueError(f"Telnyx credential create failed ({r.status_code}): {r.text}")
         data = r.json()["data"]
@@ -79,8 +109,10 @@ def generate_voice_access_token(
     r = httpx.post(
         f"{base}/telephony_credentials/{credential_id}/token",
         headers=headers,
-        timeout=10,
+        timeout=15,
     )
+    # M-09: fail fast on token-create errors.
+    r.raise_for_status()
     if not r.is_success:
         raise ValueError(f"Telnyx token create failed ({r.status_code}): {r.text}")
 
@@ -215,13 +247,29 @@ def release_number(sid: str) -> bool:
     """
     _check_configured()
     if sid.startswith("+"):
-        # E.164 — find the resource ID by listing owned numbers
-        numbers = telnyx.PhoneNumber.list()
-        resource_id = next(
-            (str(n.id) for n in numbers if n.phone_number == sid), None
+        # H-16: SDK's PhoneNumber.list() returns only the first page (~20 items),
+        # so accounts with many numbers couldn't release entries past page 1.
+        # Use the REST filter directly to look up the exact resource id.
+        r = httpx.get(
+            "https://api.telnyx.com/v2/phone_numbers",
+            headers={
+                "Authorization": f"Bearer {settings.telnyx_api_key}",
+                "Accept": "application/json",
+            },
+            params={
+                "filter[phone_number]": sid,
+                "page[size]": 1,
+            },
+            timeout=15,
         )
-        if not resource_id:
+        if not r.is_success:
+            raise ValueError(
+                f"Telnyx phone number lookup failed ({r.status_code}): {r.text}"
+            )
+        items = r.json().get("data") or []
+        if not items:
             return False
+        resource_id = str(items[0]["id"])
         telnyx.PhoneNumber.delete(resource_id)
     else:
         telnyx.PhoneNumber.delete(sid)
@@ -248,6 +296,12 @@ def call_record_start(call_control_id: str) -> None:
     webhook_url is set explicitly so call.recording.saved events are delivered to
     our recording-event endpoint regardless of which Telnyx application owns the
     call (the TeXML app and the Call Control app are separate resources).
+
+    H-15: webhook_url derives from settings.public_backend_url which can rotate
+    (Railway redeploys, custom-domain swaps). If you swap that base URL, any
+    in-flight recordings started under the previous host will deliver their
+    `call.recording.saved` events to the old endpoint and be lost.
+    Timeout is bumped to 15s for resilience against slow Telnyx API responses.
     """
     _check_configured()
     url = f"https://api.telnyx.com/v2/calls/{call_control_id}/actions/record_start"
@@ -261,7 +315,7 @@ def call_record_start(call_control_id: str) -> None:
             "webhook_url_method": "POST",
         },
         headers=_cc_headers(),
-        timeout=10,
+        timeout=15,
     )
     resp.raise_for_status()
 
@@ -284,44 +338,65 @@ def call_record_stop(call_control_id: str) -> None:
 # ============================================================
 
 def build_outgoing_texml(to_number: str, caller_id: str | None = None) -> str:
-    """TeXML for an outgoing call from the browser."""
+    """TeXML for an outgoing call from the browser.
+
+    C-02: validate inputs against strict regexes, then XML-escape the text
+    content and use quoteattr() for attribute values to defeat injection.
+    """
     if not caller_id:
         raise ValueError(
             "No phone number assigned to this account. "
             "Ask an admin to assign a Telnyx number before making calls."
         )
+    if not _PHONE_RE.match(to_number or ""):
+        raise ValueError(f"Invalid to_number: {to_number!r}")
+    if not _PHONE_RE.match(caller_id):
+        raise ValueError(f"Invalid caller_id: {caller_id!r}")
+
     action = f"{settings.public_backend_url}/api/telnyx/call-status"
+    # quoteattr returns the value WITH surrounding quotes already.
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
-        f'<Dial callerId="{caller_id}" timeout="60" action="{action}">'
-        f"<Number>{to_number}</Number>"
+        f"<Dial callerId={quoteattr(caller_id)} timeout=\"60\" action={quoteattr(action)}>"
+        f"<Number>{escape(to_number)}</Number>"
         "</Dial>"
         "</Response>"
     )
 
 
 def build_incoming_texml(sip_username: str) -> str:
-    """TeXML for an incoming call — ring the browser WebRTC client via SIP."""
+    """TeXML for an incoming call — ring the browser WebRTC client via SIP.
+
+    C-02: validate the SIP username, escape text content, quoteattr attributes.
+    """
     if not sip_username:
         raise ValueError(
             "sip_username must not be empty — call build_voicemail_texml() instead "
             "when the user has no SIP credential yet."
         )
+    if not _SIP_USER_RE.match(sip_username):
+        raise ValueError(f"Invalid sip_username: {sip_username!r}")
+
     action = f"{settings.public_backend_url}/api/telnyx/post-dial"
     sip_uri = f"sip:{sip_username}@sip.telnyx.com"
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response>"
-        f'<Dial timeout="40" action="{action}">'
-        f"<Sip>{sip_uri}</Sip>"
+        f"<Dial timeout=\"40\" action={quoteattr(action)}>"
+        f"<Sip>{escape(sip_uri)}</Sip>"
         "</Dial>"
         "</Response>"
     )
 
 
 def build_voicemail_texml() -> str:
-    """TeXML to prompt and record a voicemail after a missed call."""
+    """TeXML to prompt and record a voicemail after a missed call.
+
+    C-02: action URL is escaped via quoteattr (no user-controlled inputs here,
+    but defence-in-depth in case settings.public_backend_url ever contains
+    XML-significant characters).
+    """
     action = f"{settings.public_backend_url}/api/telnyx/voicemail-complete"
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
@@ -330,6 +405,6 @@ def build_voicemail_texml() -> str:
         "The person you are calling is not available. "
         "Please leave a message after the beep."
         "</Say>"
-        f'<Record maxLength="120" playBeep="true" action="{action}"/>'
+        f"<Record maxLength=\"120\" playBeep=\"true\" action={quoteattr(action)}/>"
         "</Response>"
     )

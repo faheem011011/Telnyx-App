@@ -1,6 +1,8 @@
 """SMS messaging endpoints."""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, and_, desc, func
+from sqlalchemy import or_, and_, case, desc, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,8 +11,22 @@ from app.schemas import ContactOut, ConversationOut, MessageCreate, MessageOut
 from app.services.deps import get_current_user
 from app.services.telnyx_service import send_sms
 
+log = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
+
+
+def _normalize_phone(raw: str) -> str:
+    """Best-effort E.164 normalize: strips non-digits, prepends +1 for 10-digit US, + for 11-digit starting with 1."""
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    if (raw or "").startswith("+"):
+        return raw
+    return f"+{digits}" if digits else raw
 
 
 def _from_number(user: User, db: Session) -> str:
@@ -46,19 +62,36 @@ def list_conversations(
 
     A conversation is the thread of messages between the user and one other number.
     """
-    messages = db.query(Message).filter(
-        Message.owner_id == current_user.id
-    ).order_by(desc(Message.created_at)).all()
+    # H-10: compute the latest message per "other" number entirely in SQL.
+    # The "other" party is from_number for inbound and to_number for outbound.
+    # We use Postgres DISTINCT ON to pick the newest row per group in one pass,
+    # avoiding loading all of a user's messages into memory.
+    other_col = case(
+        (Message.direction == "inbound", Message.from_number),
+        else_=Message.to_number,
+    ).label("other")
 
-    # Collect the latest message per unique "other" number in one pass
-    last_msg: dict[str, Message] = {}
-    for msg in messages:
-        other = msg.from_number if msg.direction == "inbound" else msg.to_number
-        if other not in last_msg:
-            last_msg[other] = msg
+    latest_sub = (
+        db.query(Message.id.label("id"), other_col)
+        .filter(Message.owner_id == current_user.id)
+        .order_by(other_col, desc(Message.created_at))
+        .distinct(other_col)
+        .subquery()
+    )
 
-    if not last_msg:
+    latest_messages = (
+        db.query(Message)
+        .filter(Message.id.in_(db.query(latest_sub.c.id)))
+        .all()
+    )
+
+    if not latest_messages:
         return []
+
+    last_msg: dict[str, Message] = {}
+    for msg in latest_messages:
+        other = msg.from_number if msg.direction == "inbound" else msg.to_number
+        last_msg[other] = msg
 
     numbers = list(last_msg.keys())
 
@@ -101,6 +134,7 @@ def get_thread(
     current_user: User = Depends(get_current_user),
 ):
     """Return the full message history with a given phone number."""
+    phone_number = _normalize_phone(phone_number)
     messages = db.query(Message).filter(
         Message.owner_id == current_user.id,
         or_(
@@ -128,6 +162,7 @@ def send_message(
     current_user: User = Depends(get_current_user),
 ):
     """Send an SMS message from the user's assigned Telnyx number."""
+    payload.to_number = _normalize_phone(payload.to_number)
     from_num = _from_number(current_user, db)
     try:
         result = send_sms(payload.to_number, payload.body, from_num)
@@ -159,11 +194,24 @@ def delete_thread(
     current_user: User = Depends(get_current_user),
 ):
     """Delete all messages in a conversation with a given number."""
+    phone_number = _normalize_phone(phone_number)
+
+    # M-17: pre-flight count so unknown numbers return 404 instead of a
+    # confusing 204 (which would otherwise indicate "deleted" with 0 rows).
+    match_clause = or_(
+        and_(Message.direction == "inbound", Message.from_number == phone_number),
+        and_(Message.direction == "outbound", Message.to_number == phone_number),
+    )
+    existing = (
+        db.query(func.count(Message.id))
+        .filter(Message.owner_id == current_user.id, match_clause)
+        .scalar()
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="No conversation with that number")
+
     db.query(Message).filter(
         Message.owner_id == current_user.id,
-        or_(
-            and_(Message.direction == "inbound", Message.from_number == phone_number),
-            and_(Message.direction == "outbound", Message.to_number == phone_number),
-        ),
+        match_clause,
     ).delete(synchronize_session=False)
     db.commit()

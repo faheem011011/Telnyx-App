@@ -127,6 +127,22 @@ def _ensure_aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def _parse_iso(s: str) -> datetime | None:
+    """M-20: parse ISO timestamp, rejecting naive (no-offset) strings.
+
+    Returning None for naive timestamps forces callers to be explicit about UTC
+    or local-zone offsets — silently coercing naive→UTC produces DST-bucket bugs
+    around spring-forward / fall-back transitions.
+    """
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return None
+    return dt
+
+
 def _get_window(range_str: str, start: str | None, end: str | None):
     now = datetime.now(timezone.utc)
     if range_str == "1d":
@@ -137,22 +153,22 @@ def _get_window(range_str: str, start: str | None, end: str | None):
     if range_str in deltas:
         return now - timedelta(days=deltas[range_str]), now
     if range_str == "custom" and start and end:
-        try:
-            ps = datetime.fromisoformat(start.replace("Z", "+00:00"))
-            pe = datetime.fromisoformat(end.replace("Z", "+00:00"))
-            return _ensure_aware(ps), _ensure_aware(pe)
-        except ValueError:
-            pass
+        # M-20: only accept tz-aware ISO timestamps; fall back to default 7d if
+        # either bound is naive or unparsable.
+        ps = _parse_iso(start)
+        pe = _parse_iso(end)
+        if ps is not None and pe is not None:
+            return ps, pe
     return now - timedelta(days=7), now
 
 
 def _extract_area_code(number: str) -> str:
+    # M-12: strict NANPA-only extraction. Non-NANPA E.164 numbers return
+    # "Unknown" rather than being silently bucketed under a misleading code.
     digits = "".join(c for c in (number or "") if c.isdigit())
     if len(digits) == 11 and digits[0] == "1":
         return digits[1:4]
     if len(digits) == 10:
-        return digits[:3]
-    if len(digits) > 6:
         return digits[:3]
     return "Unknown"
 
@@ -178,18 +194,28 @@ def _summarize_sql(
     if direction:
         call_base.append(Call.direction == direction)
 
-    def cc(*extra):
-        return db.query(func.count(Call.id)).filter(*call_base, *extra).scalar() or 0
+    # M-05: single query with conditional aggregates instead of ~9 round trips.
+    call_row = db.query(
+        func.count(Call.id).label("total"),
+        func.sum(case((Call.direction == "inbound",  1), else_=0)).label("inbound"),
+        func.sum(case((Call.direction == "outbound", 1), else_=0)).label("outbound"),
+        func.sum(case((Call.status == "completed",   1), else_=0)).label("answered"),
+        func.sum(case((Call.status.in_(["missed", "no-answer"]), 1), else_=0)).label("missed"),
+        func.sum(case((Call.status == "busy",        1), else_=0)).label("declined"),
+        func.sum(case((Call.voicemail_url.isnot(None), 1), else_=0)).label("voicemails"),
+        func.sum(case((Call.recording_url.isnot(None), 1), else_=0)).label("recordings"),
+        func.sum(case((Call.is_starred.is_(True), 1), else_=0)).label("starred"),
+    ).filter(*call_base).one()
 
-    total    = cc()
-    inbound  = cc(Call.direction == "inbound")
-    outbound = cc(Call.direction == "outbound")
-    answered = cc(Call.status == "completed")
-    missed   = cc(Call.status.in_(["missed", "no-answer"]))
-    declined = cc(Call.status == "busy")
-    vms      = cc(Call.voicemail_url.isnot(None))
-    recs     = cc(Call.recording_url.isnot(None))
-    starred  = cc(Call.is_starred.is_(True))
+    total    = call_row.total      or 0
+    inbound  = call_row.inbound    or 0
+    outbound = call_row.outbound   or 0
+    answered = call_row.answered   or 0
+    missed   = call_row.missed     or 0
+    declined = call_row.declined   or 0
+    vms      = call_row.voicemails or 0
+    recs     = call_row.recordings or 0
+    starred  = call_row.starred    or 0
 
     msg_base = [
         Message.owner_id.in_(target_ids),
@@ -197,13 +223,18 @@ def _summarize_sql(
         Message.created_at < period_end,
     ]
 
-    def mc(*extra):
-        return db.query(func.count(Message.id)).filter(*msg_base, *extra).scalar() or 0
+    # M-05: single query for message stats.
+    msg_row = db.query(
+        func.count(Message.id).label("total"),
+        func.sum(case((Message.is_read.is_(False),     1), else_=0)).label("unread"),
+        func.sum(case((Message.direction == "inbound", 1), else_=0)).label("inbound"),
+        func.sum(case((Message.direction == "outbound",1), else_=0)).label("outbound"),
+    ).filter(*msg_base).one()
 
-    total_msgs    = mc()
-    unread_msgs   = mc(Message.is_read.is_(False))
-    inbound_msgs  = mc(Message.direction == "inbound")
-    outbound_msgs = mc(Message.direction == "outbound")
+    total_msgs    = msg_row.total    or 0
+    unread_msgs   = msg_row.unread   or 0
+    inbound_msgs  = msg_row.inbound  or 0
+    outbound_msgs = msg_row.outbound or 0
 
     return {
         "total_calls":       total,

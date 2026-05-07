@@ -273,7 +273,7 @@ export function TelnyxProvider({ children }) {
     return () => {
       cancelled = true;
       clearTimeout(refreshTimerRef.current);
-      if (client) { try { client.disconnect(); } catch (_) {} }
+      if (client) { try { client.disconnect(); } catch (e) { console.warn('[Telnyx] disconnect on cleanup failed', e); } }
       clientRef.current = null;
       setDeviceReady(false);
     };
@@ -317,12 +317,14 @@ export function TelnyxProvider({ children }) {
   const acceptIncoming = useCallback(() => {
     if (!incomingCall) return;
 
-    // Try every field the Telnyx SDK might use for the caller's number
+    // Try every field the Telnyx SDK might use for the caller's number.
+    // For inbound calls the SDK exposes the caller's E.164 on `incomingCall.from`.
+    // Never fall back to `destinationNumber` — that is the *user's own* number.
     const from =
       incomingCall.options?.remoteCallerNumber ||
       incomingCall.options?.callerNumber       ||
+      incomingCall.from                        ||
       incomingCall.options?.displayName        ||
-      incomingCall.options?.destinationNumber  ||
       'Unknown';
 
     answeredCallIdRef.current = incomingCall.id;
@@ -348,7 +350,7 @@ export function TelnyxProvider({ children }) {
 
   const rejectIncoming = useCallback(() => {
     if (!incomingCall) return;
-    try { incomingCall.hangup(); } catch (_) {}
+    try { incomingCall.hangup(); } catch (e) { console.warn('[Telnyx] reject hangup failed', e); }
     setIncomingCall(null);
   }, [incomingCall]);
 
@@ -366,7 +368,7 @@ export function TelnyxProvider({ children }) {
     answeredCallIdRef.current = null;
 
     if (callToHang) {
-      try { callToHang.hangup(); } catch (_) {}
+      try { callToHang.hangup(); } catch (e) { console.warn('[Telnyx] hangup failed', e); }
     }
   }, [clearCallState]); // No longer depends on activeCall state — stale-closure-safe
 
@@ -385,12 +387,17 @@ export function TelnyxProvider({ children }) {
 
   const toggleRecording = useCallback(async () => {
     if (!activeCallRef.current) return;
+    const callSid = activeCallRef.current?.id;
+    if (!callSid) {
+      console.warn('[Telnyx] No SDK call id known; cannot record');
+      return;
+    }
     try {
       if (!recording) {
-        await callsApi.startRecording();
+        await callsApi.startRecording(callSid);
         setRecording(true);
       } else {
-        await callsApi.stopRecording();
+        await callsApi.stopRecording(callSid);
         setRecording(false);
       }
     } catch (e) {

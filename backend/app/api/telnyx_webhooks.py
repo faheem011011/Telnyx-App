@@ -29,20 +29,23 @@ Internal action URLs (set in code, not in the Telnyx Console):
 Multi-tenant routing:
   Outbound calls  — user resolved from SIP identity or caller number
   Inbound calls   — user resolved by matching PhoneNumber to the "To" number
-  Fallback        — oldest user record (supports single-user / dev setups)
+  No fallback to a "primary user" — calls/SMS that cannot be routed to a
+  specific tenant are dropped or sent to voicemail.
 """
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 import telnyx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Call, Message, PhoneNumber, User
+from app.models import Call, Message, PhoneNumber, User, WebhookEvent
 from app.services.telnyx_service import (
     build_incoming_texml,
     build_outgoing_texml,
@@ -52,6 +55,10 @@ from app.services.telnyx_service import (
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/telnyx", tags=["telnyx-webhooks"])
+
+
+# Reject events whose timestamp is more than this many seconds away from now (C-01).
+_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 
 
 # ---------------------------------------------------------------------------
@@ -80,24 +87,25 @@ def _normalize_recording_url(url: str) -> str:
 # Multi-tenant user resolution
 # ---------------------------------------------------------------------------
 
-def _get_primary_user(db: Session) -> User | None:
-    return db.query(User).order_by(User.id.asc()).first()
-
-
 def _resolve_user_by_to_number(to_number: str, db: Session) -> User | None:
-    """Look up the user who owns the Telnyx number that received the call or SMS."""
-    if to_number:
-        pn = db.query(PhoneNumber).filter(PhoneNumber.phone_number == to_number).first()
-        if pn and pn.assigned_to_user_id:
-            user = db.query(User).filter(
-                User.id == pn.assigned_to_user_id, User.is_active.is_(True)
-            ).first()
-            if user:
-                return user
-        user = db.query(User).filter(User.phone_number == to_number).first()
+    """Look up the user who owns the Telnyx number that received the call or SMS.
+
+    C-03: returns None when the inbound number is not assigned to any tenant —
+    no fallback to a "primary user". Callers must handle None gracefully.
+    """
+    if not to_number:
+        return None
+    pn = db.query(PhoneNumber).filter(PhoneNumber.phone_number == to_number).first()
+    if pn and pn.assigned_to_user_id:
+        user = db.query(User).filter(
+            User.id == pn.assigned_to_user_id, User.is_active.is_(True)
+        ).first()
         if user:
             return user
-    return _get_primary_user(db)
+    user = db.query(User).filter(User.phone_number == to_number).first()
+    if user:
+        return user
+    return None
 
 
 def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
@@ -105,38 +113,73 @@ def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
 
     Telnyx TeXML sends the SIP URI as From when calling from a WebRTC client,
     e.g. "sip:user_3@sip.telnyx.com". We parse the numeric user ID from the
-    SIP username. Falls back to the primary user if parsing fails.
+    SIP username.
+
+    C-03: returns None when the SIP identity does not resolve — no fallback to
+    the "primary user". Callers must handle None gracefully.
     """
-    if from_field:
-        # SIP URI format: sip:user_3@sip.telnyx.com → extract "user_3"
-        sip_part = from_field.replace("sip:", "").split("@")[0]
-        if sip_part.startswith("user_"):
-            try:
-                user_id = int(sip_part[len("user_"):])
-                user = db.query(User).filter(User.id == user_id).first()
-                if user:
-                    return user
-            except (ValueError, IndexError):
-                pass
-    return _get_primary_user(db)
+    if not from_field:
+        return None
+    # SIP URI format: sip:user_3@sip.telnyx.com → extract "user_3"
+    sip_part = from_field.replace("sip:", "").split("@")[0]
+    if sip_part.startswith("user_"):
+        try:
+            user_id = int(sip_part[len("user_"):])
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                return user
+        except (ValueError, IndexError):
+            # M-10: malformed SIP identity is expected for unknown callers; log
+            # at debug level instead of swallowing silently.
+            log.debug("Could not parse user_id from SIP identity %r", from_field)
+    return None
 
 
 # ---------------------------------------------------------------------------
-# Telnyx webhook signature verification
+# Telnyx webhook signature verification (C-01, C-07)
 # ---------------------------------------------------------------------------
 
-def _verify_json_webhook_signature(request: Request, raw_body: bytes) -> None:
-    """Verify the Telnyx Ed25519 signature on Call Control JSON webhooks.
+def _verify_telnyx_signature(request: Request, raw_body: bytes) -> None:
+    """Verify the Telnyx Ed25519 signature on EVERY webhook (JSON or TeXML).
 
-    Only call this on JSON endpoints (recording-event, incoming-sms).
-    TeXML webhooks are form-encoded and carry no Ed25519 header — calling
-    this on them will always reject legitimate Telnyx requests.
+    C-01/C-07: Telnyx signs all webhook deliveries (TeXML form-encoded too) with
+    the same Ed25519 key, signed over the raw body. We must:
+      • Refuse-by-default when settings.telnyx_public_key is missing — no
+        silent skip in production.
+      • Verify the Ed25519 signature.
+      • Enforce a 5-minute replay window using the telnyx-timestamp header,
+        because Webhook.construct_event verifies the signature against the
+        timestamp value but does not enforce a server-side freshness window.
     """
     if not settings.telnyx_public_key:
-        return
+        log.critical(
+            "Telnyx webhook public key is not configured — refusing webhook. "
+            "Set TELNYX_PUBLIC_KEY in the environment to enable signature "
+            "verification."
+        )
+        raise HTTPException(
+            status_code=503, detail="Webhook signature key not configured"
+        )
 
     sig_header = request.headers.get("telnyx-signature-ed25519", "")
     timestamp = request.headers.get("telnyx-timestamp", "")
+
+    # Replay-window check on the timestamp header — Telnyx SDK does not do this.
+    try:
+        ts_int = int(timestamp)
+    except (TypeError, ValueError):
+        log.warning("Rejected Telnyx webhook with missing/invalid timestamp header")
+        raise HTTPException(
+            status_code=403, detail="Forbidden: invalid Telnyx timestamp"
+        )
+    if abs(int(time.time()) - ts_int) > _WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS:
+        log.warning(
+            "Rejected Telnyx webhook outside replay window (ts=%s, now=%s)",
+            ts_int, int(time.time()),
+        )
+        raise HTTPException(
+            status_code=403, detail="Forbidden: Telnyx webhook timestamp out of window"
+        )
 
     try:
         telnyx.Webhook.construct_event(
@@ -146,8 +189,46 @@ def _verify_json_webhook_signature(request: Request, raw_body: bytes) -> None:
             settings.telnyx_public_key,
         )
     except Exception:
-        log.warning("Rejected request with invalid Telnyx JSON webhook signature")
+        log.warning("Rejected request with invalid Telnyx webhook signature")
         raise HTTPException(status_code=403, detail="Forbidden: invalid Telnyx signature")
+
+
+# ---------------------------------------------------------------------------
+# Webhook idempotency (C-06)
+# ---------------------------------------------------------------------------
+
+def _claim_event(db: Session, event_id: str, event_type: str) -> bool:
+    """Returns True if this is the first time we've seen this event id; False if duplicate.
+
+    Inserts a row immediately so concurrent retries hit the unique constraint.
+    Pass an empty event_id when no usable identifier exists — in that case we
+    cannot dedupe, so we allow the event through.
+    """
+    if not event_id:
+        return True  # Cannot dedupe; allow processing.
+    try:
+        db.add(WebhookEvent(telnyx_event_id=event_id, event_type=event_type))
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        log.info("Duplicate Telnyx webhook ignored: %s (%s)", event_id, event_type)
+        return False
+
+
+def _texml_event_id(route_name: str, form_data: dict) -> str:
+    """Derive a stable event id for form-encoded TeXML retries.
+
+    Telnyx retries TeXML deliveries on transient failures with the same CallSid
+    and DialCallStatus/CallStatus values, so we synthesise an id from the route
+    and those identifying fields. Returns "" when CallSid is absent so dedupe
+    is skipped (matches the design note in the audit).
+    """
+    call_sid = form_data.get("CallSid") or ""
+    if not call_sid:
+        return ""
+    status = form_data.get("DialCallStatus") or form_data.get("CallStatus") or ""
+    return f"{route_name}:{call_sid}:{status}"
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +240,7 @@ def _verify_json_webhook_signature(request: Request, raw_body: bytes) -> None:
 async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
     """Handle an outgoing call initiated from the browser via Telnyx WebRTC SDK."""
     raw_body = await request.body()
+    _verify_telnyx_signature(request, raw_body)
 
     form = await request.form()
     form_data = dict(form)
@@ -166,6 +248,10 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
     to_number = form_data.get("To", "")
     from_field = form_data.get("From", "")
     call_sid = form_data.get("CallSid")
+
+    # C-06: dedupe before mutating any state.
+    if not _claim_event(db, _texml_event_id("outbound-call", form_data), "outbound-call"):
+        return _xml("<Response></Response>")
 
     user = _resolve_user_by_caller(from_field, db)
 
@@ -220,6 +306,7 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
 async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     """Handle an incoming PSTN call to the Telnyx phone number."""
     raw_body = await request.body()
+    _verify_telnyx_signature(request, raw_body)
 
     form = await request.form()
     form_data = dict(form)
@@ -228,9 +315,29 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     from_number = form_data.get("From", "")
     call_sid = form_data.get("CallSid")
 
+    # C-06: dedupe before mutating any state.
+    if not _claim_event(db, _texml_event_id("incoming-call", form_data), "incoming-call"):
+        return _xml(build_voicemail_texml())
+
     user = _resolve_user_by_to_number(to_number, db)
 
-    if user:
+    # C-03: if no user owns this number, do NOT persist a Call row owned by
+    # anyone — just send the caller to voicemail.
+    if not user:
+        log.warning("No user found for To=%s; sending to voicemail", to_number)
+        return _xml(build_voicemail_texml())
+
+    # H-01: if the user has no SIP username (never logged in since their
+    # credential was created), we can't ring the browser. Insert the Call row
+    # with the right terminal status before returning the voicemail TeXML so it
+    # doesn't sit in "ringing" forever.
+    if not user.telnyx_sip_username:
+        log.warning(
+            "User %s has no Telnyx SIP username yet — they have not logged in "
+            "since the credential was created. Inbound call cannot ring the "
+            "browser; voicemail will capture it.",
+            user.id,
+        )
         try:
             call = Call(
                 owner_id=user.id,
@@ -238,31 +345,38 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
                 direction="inbound",
                 from_number=from_number,
                 to_number=to_number,
-                status="ringing",
+                status="missed",
                 started_at=_now(),
+                ended_at=_now(),
                 is_read=False,
             )
             db.add(call)
             db.commit()
-            log.info("Inbound call created: SID=%s user=%s from=%s", call_sid, user.id, from_number)
         except Exception:
             db.rollback()
-            log.exception("Failed to persist inbound call record SID=%s", call_sid)
-        if user.telnyx_sip_username:
-            sip_username = user.telnyx_sip_username
-        else:
-            log.warning(
-                "User %s has no Telnyx SIP username yet — they have not logged in since "
-                "the credential was created. Inbound call cannot ring the browser; "
-                "voicemail will capture it.",
-                user.id,
-            )
-            return _xml(build_voicemail_texml())
-    else:
-        log.warning("No user found for To=%s; sending to voicemail", to_number)
+            log.exception("Failed to persist missed inbound call SID=%s", call_sid)
         return _xml(build_voicemail_texml())
 
-    return _xml(build_incoming_texml(sip_username))
+    # Happy path: user has a SIP credential, ring the browser.
+    try:
+        call = Call(
+            owner_id=user.id,
+            call_sid=call_sid,
+            direction="inbound",
+            from_number=from_number,
+            to_number=to_number,
+            status="ringing",
+            started_at=_now(),
+            is_read=False,
+        )
+        db.add(call)
+        db.commit()
+        log.info("Inbound call created: SID=%s user=%s from=%s", call_sid, user.id, from_number)
+    except Exception:
+        db.rollback()
+        log.exception("Failed to persist inbound call record SID=%s", call_sid)
+
+    return _xml(build_incoming_texml(user.telnyx_sip_username))
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +387,7 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
 async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after <Dial> resolves for an inbound call."""
     raw_body = await request.body()
+    _verify_telnyx_signature(request, raw_body)
 
     form = await request.form()
     form_data = dict(form)
@@ -282,16 +397,26 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
     duration_raw = form_data.get("DialCallDuration") or "0"
     duration = int(duration_raw) if duration_raw.isdigit() else 0
 
+    # C-06: dedupe.
+    if not _claim_event(db, _texml_event_id("post-dial", form_data), "post-dial"):
+        return _xml("<Response></Response>")
+
     if call_sid:
         call = db.query(Call).filter(Call.call_sid == call_sid).first()
         if call:
             if dial_status == "completed":
                 call.status = "completed"
-                call.duration_seconds = duration
-                call.ended_at = _now()
+                # M-08: only overwrite duration if the new value is greater so a
+                # late post-dial cannot clobber a higher duration set elsewhere.
+                if duration and duration > (call.duration_seconds or 0):
+                    call.duration_seconds = duration
+                # M-08: only set ended_at if currently NULL (race with /call-status).
+                if not call.ended_at:
+                    call.ended_at = _now()
             elif dial_status in ("no-answer", "busy", "failed", "canceled"):
                 call.status = "missed"
-                call.ended_at = _now()
+                if not call.ended_at:
+                    call.ended_at = _now()
             try:
                 db.commit()
             except Exception:
@@ -312,6 +437,7 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
 async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     """Receive call lifecycle status updates from Telnyx."""
     raw_body = await request.body()
+    _verify_telnyx_signature(request, raw_body)
 
     form = await request.form()
     form_data = dict(form)
@@ -325,11 +451,17 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     if not call_sid:
         return Response(status_code=204)
 
+    # C-06: dedupe.
+    if not _claim_event(db, _texml_event_id("call-status", form_data), "call-status"):
+        return _xml("<Response></Response>")
+
     call = db.query(Call).filter(Call.call_sid == call_sid).first()
     if call:
         if call_status:
             call.status = call_status
-        if duration:
+        # M-08: only update duration when the incoming value is greater so a
+        # racing /post-dial cannot reset duration to 0 after this handler set it.
+        if duration and duration > (call.duration_seconds or 0):
             call.duration_seconds = duration
         if recording_url:
             call.recording_url = _normalize_recording_url(recording_url)
@@ -353,12 +485,17 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
 async def handle_voicemail_complete(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after a voicemail recording finishes."""
     raw_body = await request.body()
+    _verify_telnyx_signature(request, raw_body)
 
     form = await request.form()
     form_data = dict(form)
 
     call_sid = form_data.get("CallSid")
     recording_url = form_data.get("RecordingUrl")
+
+    # C-06: dedupe.
+    if not _claim_event(db, _texml_event_id("voicemail-complete", form_data), "voicemail-complete"):
+        return _xml("<Response><Hangup/></Response>")
 
     if call_sid and recording_url:
         call = db.query(Call).filter(Call.call_sid == call_sid).first()
@@ -385,7 +522,8 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
 async def handle_voicemail_transcription(request: Request):
     # Telnyx TeXML <Record> does not support transcription callbacks — this
     # endpoint is kept so any stale webhook config doesn't cause 404 errors.
-    await request.body()
+    raw_body = await request.body()
+    _verify_telnyx_signature(request, raw_body)
     return Response(status_code=204)
 
 
@@ -402,7 +540,7 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
       { "data": { "event_type": "...", "payload": { ... } } }
     """
     raw_body = await request.body()
-    _verify_json_webhook_signature(request, raw_body)
+    _verify_telnyx_signature(request, raw_body)
 
     try:
         body = json.loads(raw_body)
@@ -413,6 +551,11 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
     event = body.get("data", {})
     event_type = event.get("event_type", "")
     payload = event.get("payload", {})
+
+    # C-06: dedupe by Telnyx event id (the "id" on data, not on payload).
+    event_id = event.get("id") or ""
+    if not _claim_event(db, event_id, event_type or "incoming-sms"):
+        return Response(status_code=204)
 
     # ── Delivery status update for outbound messages ──────────────────────────
     if event_type in ("message.sent", "message.finalized"):
@@ -449,27 +592,30 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
 
     user = _resolve_user_by_to_number(to_number, db)
 
-    if user:
-        try:
-            msg = Message(
-                owner_id=user.id,
-                message_sid=message_id or None,
-                direction="inbound",
-                from_number=from_number,
-                to_number=to_number,
-                body=text,
-                status="received",
-                media_url=media_url,
-                is_read=False,
-            )
-            db.add(msg)
-            db.commit()
-            log.info("Inbound SMS saved: from=%s to=%s", from_number, to_number)
-        except Exception:
-            db.rollback()
-            log.exception("Failed to save inbound SMS from=%s", from_number)
-    else:
-        log.warning("No user found for inbound SMS to=%s", to_number)
+    # C-03: if no tenant owns this DID, drop the message — do NOT save it
+    # against the "primary user".
+    if not user:
+        log.warning("No user found for inbound SMS to=%s; dropping", to_number)
+        return Response(status_code=204)
+
+    try:
+        msg = Message(
+            owner_id=user.id,
+            message_sid=message_id or None,
+            direction="inbound",
+            from_number=from_number,
+            to_number=to_number,
+            body=text,
+            status="received",
+            media_url=media_url,
+            is_read=False,
+        )
+        db.add(msg)
+        db.commit()
+        log.info("Inbound SMS saved: from=%s to=%s", from_number, to_number)
+    except Exception:
+        db.rollback()
+        log.exception("Failed to save inbound SMS from=%s", from_number)
 
     return Response(status_code=204)
 
@@ -489,7 +635,7 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
       Call Control Application → Webhook URL
     """
     raw_body = await request.body()
-    _verify_json_webhook_signature(request, raw_body)
+    _verify_telnyx_signature(request, raw_body)
 
     try:
         body = json.loads(raw_body)
@@ -497,7 +643,14 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
         return Response(status_code=400)
 
     event = body.get("data", {})
-    if event.get("event_type") != "call.recording.saved":
+
+    # C-06: dedupe by Telnyx event id.
+    event_id = event.get("id") or ""
+    event_type = event.get("event_type", "recording-event")
+    if not _claim_event(db, event_id, event_type):
+        return Response(status_code=204)
+
+    if event_type != "call.recording.saved":
         return Response(status_code=204)
 
     payload = event.get("payload", {})

@@ -13,14 +13,24 @@ export default function SetupPage() {
   const [checking, setChecking] = useState(true);
   const [alreadyDone, setAlreadyDone] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
 
   useEffect(() => {
-    authApi.checkSetup()
-      .then(() => setChecking(false))
+    const TIMEOUT_MS = 5000;
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS)
+    );
+
+    let cancelled = false;
+    Promise.race([authApi.checkSetup(), timeoutPromise])
+      .then(() => { if (!cancelled) setChecking(false); })
       .catch((err) => {
+        if (cancelled) return;
         if (err.response?.status === 410) setAlreadyDone(true);
+        else if (err.message === 'timeout') setNetworkError(true);
         setChecking(false);
       });
+    return () => { cancelled = true; };
   }, []);
 
   const handleSubmit = async (e) => {
@@ -75,6 +85,32 @@ export default function SetupPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-[#07438C] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (networkError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white px-6">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-50 flex items-center justify-center">
+            <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-display font-bold text-gray-900 mb-3">Cannot reach backend</h2>
+          <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+            Cannot reach backend. Check your connection and reload.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="inline-block px-6 py-2.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg, #07438C 0%, #1C94AE 100%)' }}
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

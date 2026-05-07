@@ -22,11 +22,19 @@ import AdminPage from './pages/AdminPage';
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+  static getDerivedStateFromError() {
+    // L-14: do NOT capture error.message into state — it would render to the
+    // user and could leak internal details. Devs see it via componentDidCatch.
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    // Devs only — never surface to UI. Wire to a remote logger if/when added.
+    // eslint-disable-next-line no-console
+    console.error('[ErrorBoundary] caught', error, info?.componentStack);
   }
 
   render() {
@@ -38,7 +46,7 @@ class ErrorBoundary extends Component {
           </div>
           <h2 className="text-lg font-display font-semibold mb-2">Something went wrong</h2>
           <p className="text-sm text-muted mb-4 max-w-sm">
-            {this.state.error?.message || 'An unexpected error occurred.'}
+            An unexpected error occurred. Please reload the page to try again.
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -57,25 +65,23 @@ function UserLayout() {
   const [dialerOpen, setDialerOpen] = useState(false);
 
   return (
-    <TelnyxProvider>
-      <div className="flex h-screen w-screen overflow-hidden">
-        <Sidebar onOpenDialer={() => setDialerOpen(true)} />
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <Routes>
-            <Route path="/inbox" element={<InboxPage />} />
-            <Route path="/contacts" element={<ContactsPage />} />
-            <Route path="/messages" element={<MessagesPage />} />
-            <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
-            <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/inbox" replace />} />
-          </Routes>
-        </main>
-        {dialerOpen && <Dialer onClose={() => setDialerOpen(false)} />}
-        <IncomingCallModal />
-        <ActiveCallPanel />
-      </div>
-    </TelnyxProvider>
+    <div className="flex h-screen w-screen overflow-hidden">
+      <Sidebar onOpenDialer={() => setDialerOpen(true)} />
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <Routes>
+          <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/contacts" element={<ContactsPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
+          <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/inbox" replace />} />
+        </Routes>
+      </main>
+      {dialerOpen && <Dialer onClose={() => setDialerOpen(false)} />}
+      <IncomingCallModal />
+      <ActiveCallPanel />
+    </div>
   );
 }
 
@@ -83,26 +89,36 @@ function AdminLayout() {
   const [dialerOpen, setDialerOpen] = useState(false);
 
   return (
+    <div className="flex h-screen w-screen overflow-hidden">
+      <Sidebar onOpenDialer={() => setDialerOpen(true)} />
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <Routes>
+          <Route path="/analytics" element={<DashboardPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/contacts" element={<ContactsPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
+          <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/analytics" replace />} />
+        </Routes>
+      </main>
+      {dialerOpen && <Dialer onClose={() => setDialerOpen(false)} />}
+      <IncomingCallModal />
+      <ActiveCallPanel />
+    </div>
+  );
+}
+
+// AuthenticatedShell wraps both user and admin layouts in a single
+// <TelnyxProvider> instance so the SDK does NOT remount when the user
+// navigates between routes (or when the role-based layout switches).
+// This prevents in-progress calls from dropping due to provider unmount.
+function AuthenticatedShell({ user }) {
+  return (
     <TelnyxProvider>
-      <div className="flex h-screen w-screen overflow-hidden">
-        <Sidebar onOpenDialer={() => setDialerOpen(true)} />
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <Routes>
-            <Route path="/analytics" element={<DashboardPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/inbox" element={<InboxPage />} />
-            <Route path="/contacts" element={<ContactsPage />} />
-            <Route path="/messages" element={<MessagesPage />} />
-            <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
-            <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/analytics" replace />} />
-          </Routes>
-        </main>
-        {dialerOpen && <Dialer onClose={() => setDialerOpen(false)} />}
-        <IncomingCallModal />
-        <ActiveCallPanel />
-      </div>
+      {user.role === 'admin' ? <AdminLayout /> : <UserLayout />}
     </TelnyxProvider>
   );
 }
@@ -168,10 +184,8 @@ export default function App() {
           element={
             !user ? (
               <RedirectToLoginOrSetup />
-            ) : user.role === 'admin' ? (
-              <AdminLayout />
             ) : (
-              <UserLayout />
+              <AuthenticatedShell user={user} />
             )
           }
         />

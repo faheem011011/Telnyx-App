@@ -1,10 +1,17 @@
 """Pydantic schemas for API input/output."""
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 
+# L-03: enforced via the ``Department`` Literal below.
 DEPARTMENTS = ["Data Team", "HR Team", "BD Team", "AI/ML Team", "DevOps Team"]
 ROLES = ["admin", "user"]
+
+Department = Literal["Data Team", "HR Team", "BD Team", "AI/ML Team", "DevOps Team"]
+
+# L-04: existing users with shorter passwords keep their hashes; only NEW
+# passwords going forward must be ≥12 characters.
 
 # ============================================================
 # Auth
@@ -17,7 +24,12 @@ class LoginRequest(BaseModel):
 class SetupRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: str = Field(
+        ...,
+        min_length=12,
+        max_length=72,
+        description="Password (12-72 characters)",
+    )
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -26,7 +38,12 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(..., min_length=6)
+    new_password: str = Field(
+        ...,
+        min_length=12,
+        max_length=72,
+        description="Password (12-72 characters)",
+    )
 
 
 
@@ -55,18 +72,28 @@ class UserOut(BaseModel):
 class UserAdminCreate(BaseModel):
     email: EmailStr
     name: str = Field(..., min_length=1, max_length=255)
-    password: str = Field(..., min_length=6)
+    password: str = Field(
+        ...,
+        min_length=12,
+        max_length=72,
+        description="Password (12-72 characters)",
+    )
     role: str = Field("user", pattern="^(admin|user)$")
-    department: str = Field(..., min_length=1)
+    department: Department
 
 
 class UserAdminUpdate(BaseModel):
     name: str | None = None
     role: str | None = Field(None, pattern="^(admin|user)$")
-    department: str | None = None
+    department: Department | None = None
     is_active: bool | None = None
     phone_number: str | None = None
-    password: str | None = Field(None, min_length=6)
+    password: str | None = Field(
+        None,
+        min_length=12,
+        max_length=72,
+        description="Password (12-72 characters)",
+    )
 
 
 class UserWithNumbersOut(BaseModel):
@@ -191,6 +218,15 @@ class CallUpdate(BaseModel):
     is_read: bool | None = None
     is_starred: bool | None = None
     notes: str | None = None
+
+
+class RecordingControlRequest(BaseModel):
+    """Body for /api/calls/recording/start|stop — identifies the exact call to
+    (un)record by its Telnyx CallSid (which is what the WebRTC SDK exposes as
+    ``activeCall.id``). Required so parallel/queued calls don't race on the
+    "most recent unended call" heuristic (M-07).
+    """
+    call_sid: str = Field(..., min_length=1, max_length=128)
 
 
 # ============================================================

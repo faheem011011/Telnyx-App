@@ -1,9 +1,10 @@
 """Auth endpoints: login, logout, current user, forgot/reset password."""
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -13,36 +14,57 @@ from app.models import EmailVerificationToken, PasswordResetToken, User
 from app.schemas import ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, SetupRequest, TokenResponse, UserOut
 from app.services.deps import get_current_user
 from app.services.email import send_password_reset_email, send_verification_email
-from app.services.security import create_access_token, hash_password, verify_password
+from app.services.security import bump_token_version, create_access_token, hash_password, verify_password
 from app.services.verification import issue_verification_token, make_verification_url
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+_INVALID_CREDS = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Invalid email or password",
+)
+
+
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
-def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(
+    request: Request,
+    payload: LoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not user.hashed_password or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
-    if not user.email_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email address before logging in. Check your inbox for the verification link.",
-        )
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive")
 
-    token = create_access_token(subject=user.id)
+    # Unify all failure modes (no-such-user, wrong-password, unverified, inactive)
+    # into a single 401 response to prevent user enumeration. The verify-email
+    # case still emits a server-only header hint so the UI can suggest re-sending
+    # the verification mail to a legitimate-but-unverified user.
+    if not user or not user.hashed_password or not verify_password(payload.password, user.hashed_password):
+        raise _INVALID_CREDS
+
+    if not user.is_active:
+        raise _INVALID_CREDS
+
+    if not user.email_verified:
+        # Side-channel hint, only set when the password is correct.
+        response.headers["X-Auth-Hint"] = "verify-email"
+        raise _INVALID_CREDS
+
+    token = create_access_token(subject=user.id, token_version=user.token_version)
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(current_user: User = Depends(get_current_user)) -> None:
-    """Logout — client must discard its token on receipt."""
+    """Client-side logout signal — JWTs are stateless and cannot be revoked
+    server-side without a token-version bump (see ``bump_token_version``).
+    The client MUST discard its token on receipt of 204.
+    For forced server-side revocation (admin password reset, etc.), call
+    ``bump_token_version`` and commit; outstanding tokens become invalid.
+    """
 
 
 @router.get("/me", response_model=UserOut)
@@ -66,10 +88,29 @@ def check_setup(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/setup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/hour")
-def setup(request: Request, payload: SetupRequest, db: Session = Depends(get_db)) -> UserOut:
+def setup(
+    request: Request,
+    payload: SetupRequest,
+    db: Session = Depends(get_db),
+    x_setup_token: str | None = Header(default=None, alias="X-Setup-Token"),
+) -> UserOut:
     """Create the first admin account. Permanently disabled once any user exists."""
     if db.query(User).first():
         raise _SETUP_GONE
+
+    # Gate the bootstrap endpoint behind a deployment-time secret so an
+    # internet-facing instance cannot be claimed by the first caller.
+    if not settings.initial_setup_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Initial setup not enabled",
+        )
+
+    if not x_setup_token or not secrets.compare_digest(x_setup_token, settings.initial_setup_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid setup token",
+        )
 
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -94,7 +135,8 @@ def setup(request: Request, payload: SetupRequest, db: Session = Depends(get_db)
     try:
         send_verification_email(admin.email, verify_url)
     except Exception:
-        pass
+        # M-10: best-effort send — log but never block setup on email failure.
+        log.exception("Failed to send setup verification email to %s", admin.email)
 
     return UserOut.model_validate(admin)
 
@@ -104,17 +146,19 @@ def setup(request: Request, payload: SetupRequest, db: Session = Depends(get_db)
 def forgot_password(
     request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)
 ) -> None:
-    """Request a password reset email. Returns 404 if email is not registered."""
+    """Request a password reset email. Always returns 204 to prevent email enumeration.
+
+    NOTE: combined per-email rate limiting is a future enhancement; the IP-bucket
+    limiter above is the only throttle today.
+    """
     user = db.query(User).filter(
         User.email == payload.email,
         User.is_active == True,  # noqa: E712
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found for this email. Contact your admin to get registered.",
-        )
+        # Do not signal whether the address exists — silently no-op.
+        return
 
     # Invalidate any outstanding tokens for this user
     db.query(PasswordResetToken).filter(
@@ -137,7 +181,9 @@ def forgot_password(
     try:
         send_password_reset_email(user.email, reset_url)
     except Exception:
-        pass  # Never expose email-send failures to the caller
+        # M-10: best-effort send — log but never expose failures to the caller
+        # (preserves the no-email-enumeration property of forgot-password).
+        log.exception("Failed to send password reset email to %s", user.email)
 
 
 @router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
@@ -163,6 +209,7 @@ def reset_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
 
     user.hashed_password = hash_password(payload.new_password)
+    bump_token_version(user)
     record.used = True
     db.commit()
 

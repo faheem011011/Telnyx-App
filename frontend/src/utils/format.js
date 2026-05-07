@@ -4,7 +4,8 @@
  */
 export function formatPhone(raw) {
   if (!raw) return '';
-  const digits = String(raw).replace(/\D/g, '');
+  const s = String(raw);
+  const digits = s.replace(/\D/g, '');
   if (digits.length === 11 && digits.startsWith('1')) {
     const n = digits.slice(1);
     return `+1 (${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`;
@@ -12,19 +13,34 @@ export function formatPhone(raw) {
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
-  return raw;
+  // Non-US E.164: keep `+`, group the rest in 3s for legibility
+  if (s.startsWith('+') && digits.length >= 7) {
+    const groups = digits.match(/.{1,3}/g) || [];
+    return `+${groups.join(' ')}`;
+  }
+  return s;
 }
 
 /**
- * Normalize a phone number to E.164 (+1XXXXXXXXXX) for Twilio API calls.
+ * Normalize a phone number to E.164 (+1XXXXXXXXXX for US, or international
+ * +<country><subscriber> for non-US). Returns '' for invalid input — caller
+ * must handle empty.
  */
 export function toE164(raw) {
   if (!raw) return '';
-  const digits = String(raw).replace(/\D/g, '');
+  const s = String(raw).trim();
+  const digits = s.replace(/\D/g, '');
+  // Already E.164: rebuild from cleaned digits to normalize whitespace/punctuation.
+  if (s.startsWith('+') && digits.length >= 7 && digits.length <= 15) {
+    return `+${digits}`;
+  }
+  // 10-digit US local: prepend +1
   if (digits.length === 10) return `+1${digits}`;
+  // 11-digit starting with 1: NANPA, just prepend +
   if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-  if (String(raw).startsWith('+')) return String(raw);
-  return `+${digits}`;
+  // Best-effort international (no country detection)
+  if (digits.length >= 7 && digits.length <= 15) return `+${digits}`;
+  return '';
 }
 
 /**
