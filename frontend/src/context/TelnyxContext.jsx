@@ -145,7 +145,18 @@ export function TelnyxProvider({ children }) {
         const { exp } = JSON.parse(atob(token.split('.')[1]));
         if (exp) delay = Math.max(60_000, exp * 1_000 - Date.now() - 5 * 60 * 1_000);
       } catch (_) {}
-      refreshTimerRef.current = setTimeout(() => setTokenVersion((v) => v + 1), delay);
+
+      // When the timer fires, wait until no call is active before refreshing.
+      // Refreshing mid-call runs cleanup → client.disconnect() → call drops.
+      const attemptRefresh = () => {
+        if (activeCallRef.current) {
+          // Call in progress — check again in 30 s without disconnecting
+          refreshTimerRef.current = setTimeout(attemptRefresh, 30_000);
+        } else {
+          setTokenVersion((v) => v + 1);
+        }
+      };
+      refreshTimerRef.current = setTimeout(attemptRefresh, delay);
     };
 
     const setup = async () => {
