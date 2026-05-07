@@ -67,6 +67,12 @@ def _xml(content: str) -> Response:
 
 
 def _normalize_recording_url(url: str) -> str:
+    # Telnyx recording URLs are complete API URLs — do NOT append .mp3.
+    # Only apply the extension fix for legacy Twilio-style short paths.
+    if not url:
+        return url
+    if "telnyx.com" in url or url.startswith("http"):
+        return url          # Already a full URL; Telnyx provides the right format
     return url if url.endswith(".mp3") else url + ".mp3"
 
 

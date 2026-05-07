@@ -1,10 +1,54 @@
+import { useEffect } from 'react';
 import { Phone, PhoneOff } from 'lucide-react';
 import { useTelnyx as useTwilio } from '../context/TelnyxContext';
 import { formatPhone } from '../utils/format';
 import Avatar from './Avatar';
 
+// Play a US-standard dual-tone ring (440 Hz + 480 Hz, 2 s on / 4 s off)
+// using the Web Audio API — no audio file required.
+function useRingtone() {
+  useEffect(() => {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+
+    const ctx = new AC();
+    let active = true;
+    let nextTimer = null;
+
+    const ring = () => {
+      if (!active) return;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.9);
+      gain.connect(ctx.destination);
+
+      [440, 480].forEach((freq) => {
+        const osc = ctx.createOscillator();
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 2);
+      });
+
+      // 2 s ring + 4 s silence = 6 s cycle
+      nextTimer = setTimeout(ring, 6_000);
+    };
+
+    // ctx may be suspended until the first user gesture — resume it silently
+    ctx.resume().then(ring).catch(() => {});
+
+    return () => {
+      active = false;
+      clearTimeout(nextTimer);
+      try { ctx.close(); } catch (_) {}
+    };
+  }, []); // runs once on mount (component only mounts while incomingCall is set)
+}
+
 export default function IncomingCallModal() {
   const { incomingCall, acceptIncoming, rejectIncoming } = useTwilio();
+  useRingtone();
 
   if (!incomingCall) return null;
 
