@@ -197,21 +197,41 @@ def mark_all_read(
     db.commit()
 
 
-def _call_for_recording(db: Session, user_id: int, call_sid: str) -> Call:
+def _call_for_recording(db: Session, user_id: int, call_sid: str | None) -> Call:
     """Return the specific Call row targeted by a recording control request.
 
-    M-07: avoid the prior race where ``_active_call`` picked the most-recent
-    unended call — with parallel/queued calls that could record the wrong one.
-    The frontend passes the Telnyx CallSid explicitly (the WebRTC SDK exposes
-    this as ``activeCall.id``).
+    Strategy:
+      1. If ``call_sid`` is provided AND matches a row, use it (precise — the
+         M-07 ideal: with parallel/queued calls we record the right one).
+      2. Otherwise fall back to the user's most-recent unended call. This is
+         needed because the Telnyx WebRTC SDK's ``activeCall.id`` is the SIP
+         Call-ID, which does NOT necessarily equal the TeXML ``CallSid``
+         stored on ``Call.call_sid`` from the webhook. The audit's M-07 fix
+         assumed they were the same; they are not, which broke recording.
     """
+    if call_sid:
+        call = (
+            db.query(Call)
+            .filter(
+                Call.call_sid == call_sid,
+                Call.owner_id == user_id,
+                Call.ended_at.is_(None),
+            )
+            .first()
+        )
+        if call:
+            return call
+
+    # Fallback: most-recent active call for this user. Trades exactness for
+    # reliability — see docstring above.
     call = (
         db.query(Call)
         .filter(
-            Call.call_sid == call_sid,
             Call.owner_id == user_id,
             Call.ended_at.is_(None),
+            Call.call_sid.isnot(None),
         )
+        .order_by(desc(Call.started_at))
         .first()
     )
     if not call:
