@@ -23,7 +23,7 @@ export default function Dialer({ onClose, defaultNumber = '' }) {
   const [error, setError]     = useState(null);
   const [calling, setCalling] = useState(false);
   const [flash, setFlash]     = useState(null);
-  const { makeCall, deviceReady } = useTwilio();
+  const { makeCall, deviceReady, activeCall } = useTwilio();
 
   useEffect(() => {
     const handler = (e) => {
@@ -40,6 +40,10 @@ export default function Dialer({ onClose, defaultNumber = '' }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  useEffect(() => {
+    if (activeCall) onClose();
+  }, [activeCall, onClose]);
 
   const triggerFlash = (k) => {
     setFlash(k);
@@ -66,7 +70,7 @@ export default function Dialer({ onClose, defaultNumber = '' }) {
     setCalling(true);
     try {
       await makeCall(toE164(number));
-      onClose();
+      // Dialer closes automatically via the activeCall effect above.
     } catch (e) {
       setError(e.message || 'Call failed. Check the number and try again.');
       setCalling(false);

@@ -111,28 +111,37 @@ def _resolve_user_by_to_number(to_number: str, db: Session) -> User | None:
 def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
     """Resolve the user making an outbound call from the browser.
 
-    Telnyx TeXML sends the SIP URI as From when calling from a WebRTC client,
-    e.g. "sip:user_3@sip.telnyx.com". We parse the numeric user ID from the
-    SIP username.
+    Telnyx TeXML sends the SIP URI as ``From`` when calling from a WebRTC client
+    (e.g. ``sip:abc123def456@sip.telnyx.com``). The SIP username is assigned by
+    Telnyx when the ``TelephonyCredential`` is created — it is NOT a value the
+    client controls — and it gets persisted on ``User.telnyx_sip_username`` by
+    ``calls.get_voice_token`` on first token issuance. Resolve by matching that
+    column.
 
     C-03: returns None when the SIP identity does not resolve — no fallback to
     the "primary user". Callers must handle None gracefully.
     """
     if not from_field:
         return None
-    # SIP URI format: sip:user_3@sip.telnyx.com → extract "user_3"
-    sip_part = from_field.replace("sip:", "").split("@")[0]
-    if sip_part.startswith("user_"):
-        try:
-            user_id = int(sip_part[len("user_"):])
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                return user
-        except (ValueError, IndexError):
-            # M-10: malformed SIP identity is expected for unknown callers; log
-            # at debug level instead of swallowing silently.
-            log.debug("Could not parse user_id from SIP identity %r", from_field)
-    return None
+    # SIP URI format: sip:<sip_username>@sip.telnyx.com → extract "<sip_username>"
+    sip_part = from_field.replace("sip:", "").split("@")[0].strip()
+    if not sip_part:
+        return None
+    user = (
+        db.query(User)
+        .filter(
+            User.telnyx_sip_username == sip_part,
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not user:
+        log.warning(
+            "Outbound call: no active user matched SIP identity %r — call will be hung up",
+            from_field,
+        )
+    return user
 
 
 # ---------------------------------------------------------------------------

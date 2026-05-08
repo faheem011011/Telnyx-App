@@ -62,18 +62,15 @@ function useRingtone() {
         try { ctx.close(); } catch (e) { console.warn('[Ringtone] ctx.close failed', e); }
       }
     };
-  }, []); // runs once on mount (component only mounts while incomingCall is set)
+  }, []); // runs on mount; the inner content component is only mounted while incomingCall is set, so the ring loop starts on call arrival and is torn down on unmount.
 }
 
-export default function IncomingCallModal() {
-  const { incomingCall, acceptIncoming, rejectIncoming } = useTwilio();
+function IncomingCallContent({ incomingCall, onAccept, onReject }) {
   useRingtone();
-
-  if (!incomingCall) return null;
 
   // For inbound calls the Telnyx WebRTC SDK exposes the caller's E.164 on
   // `incomingCall.from`. Never fall back to `destinationNumber` — that is
-  // the *user's own* number and would mislabel the caller as themselves.
+  // the receiver's own DID, not the caller.
   const from =
     incomingCall.options?.remoteCallerNumber ||
     incomingCall.options?.callerNumber       ||
@@ -175,7 +172,7 @@ export default function IncomingCallModal() {
         >
           {/* Decline */}
           <button
-            onClick={rejectIncoming}
+            onClick={onReject}
             style={{
               flex: 1, padding: '11px 0',
               border: 'none',
@@ -212,7 +209,7 @@ export default function IncomingCallModal() {
 
           {/* Accept */}
           <button
-            onClick={acceptIncoming}
+            onClick={onAccept}
             style={{
               flex: 1, padding: '11px 0',
               border: 'none',
@@ -248,5 +245,17 @@ export default function IncomingCallModal() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function IncomingCallModal() {
+  const { incomingCall, acceptIncoming, rejectIncoming } = useTwilio();
+  if (!incomingCall) return null;
+  return (
+    <IncomingCallContent
+      incomingCall={incomingCall}
+      onAccept={acceptIncoming}
+      onReject={rejectIncoming}
+    />
   );
 }
