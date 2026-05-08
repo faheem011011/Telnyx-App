@@ -293,13 +293,41 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
     """Handle an outgoing call initiated from the browser via Telnyx WebRTC SDK."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
     # this Telnyx app config — see _verify_telnyx_signature docstring.
+
+    # DIAGNOSTIC: log raw body + content-type + key headers so we can tell
+    # whether Telnyx is sending TeXML form data (works), JSON (Voice API
+    # mode), or empty body (SIP-layer reject). Remove once stable.
+    raw_body = await request.body()
+    content_type = request.headers.get("content-type", "")
+    user_agent = request.headers.get("user-agent", "")
+    log.info(
+        "outbound-call diagnostic: content_type=%r length=%d body_first_500=%r ua=%r",
+        content_type, len(raw_body), raw_body[:500], user_agent,
+    )
+
     form = await request.form()
     form_data = dict(form)
 
-    # DIAGNOSTIC: dump full payload so we can see what Telnyx actually sends
+    # DIAGNOSTIC: dump form payload so we can see what Telnyx actually sends
     # for browser-originated calls in this Application setup. Remove once the
     # caller-resolution path is stable.
     log.info("outbound-call payload keys=%s payload=%s", sorted(form_data.keys()), form_data)
+
+    # If form parsing yielded nothing but raw body is JSON, try parsing as
+    # Call Control v2 event so we at least see the from/to/call_id.
+    if not form_data and raw_body:
+        try:
+            json_body = json.loads(raw_body)
+            payload = json_body.get("data", {}).get("payload", {}) or json_body.get("payload", {})
+            log.info(
+                "outbound-call JSON-parsed: event_type=%r from=%r to=%r call_control_id=%r",
+                json_body.get("data", {}).get("event_type") or json_body.get("event_type"),
+                payload.get("from") or payload.get("from_sip_uri"),
+                payload.get("to") or payload.get("to_sip_uri"),
+                payload.get("call_control_id"),
+            )
+        except Exception:
+            log.info("outbound-call: body is neither form nor JSON")
 
     to_number = form_data.get("To", "")
     # Try multiple field names — different Telnyx configurations populate
