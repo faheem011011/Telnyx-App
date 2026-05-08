@@ -723,41 +723,88 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
     """Receive call.recording.saved JSON events from Telnyx Call Control.
 
     Fired after call_record_stop() completes and Telnyx has processed the file.
-    Configure this URL in the Telnyx portal under:
-      Call Control Application → Webhook URL
+    The webhook URL is set per-recording in call_record_start (services/telnyx_service.py).
     """
     raw_body = await request.body()
+
+    # DIAGNOSTIC: log what arrives BEFORE signature verification so we can see
+    # the body even if verification 403s. Remove once the recording-event flow
+    # is confirmed end-to-end.
+    log.info(
+        "recording-event diagnostic: content_type=%r length=%d body_first_500=%r",
+        request.headers.get("content-type", ""),
+        len(raw_body),
+        raw_body[:500],
+    )
+
     _verify_telnyx_signature(request, raw_body)
 
     try:
         body = json.loads(raw_body)
     except Exception:
+        log.warning("recording-event: body is not valid JSON")
         return Response(status_code=400)
 
     event = body.get("data", {})
+    event_type = event.get("event_type", "recording-event")
+    log.info("recording-event parsed: event_type=%r", event_type)
 
     # C-06: dedupe by Telnyx event id.
     event_id = event.get("id") or ""
-    event_type = event.get("event_type", "recording-event")
     if not _claim_event(db, event_id, event_type):
         return Response(status_code=204)
 
     if event_type != "call.recording.saved":
+        log.info("recording-event: ignoring non-saved event type")
         return Response(status_code=204)
 
     payload = event.get("payload", {})
     call_control_id = payload.get("call_control_id")
-    recording_url = (payload.get("recording_urls") or {}).get("mp3")
+    recording_urls = payload.get("recording_urls") or {}
+    recording_url = recording_urls.get("mp3") or recording_urls.get("wav")
 
-    if call_control_id and recording_url:
-        call = db.query(Call).filter(Call.call_sid == call_control_id).first()
-        if call:
-            call.recording_url = recording_url
-            try:
-                db.commit()
-                log.info("Recording URL saved for call_control_id=%s", call_control_id)
-            except Exception:
-                db.rollback()
-                log.exception("Failed to save recording URL for call_control_id=%s", call_control_id)
+    log.info(
+        "recording-event call.recording.saved: call_control_id=%r recording_urls=%s",
+        call_control_id, recording_urls,
+    )
+
+    if not (call_control_id and recording_url):
+        log.warning("recording-event: missing call_control_id or recording_url; ignoring")
+        return Response(status_code=204)
+
+    # Try exact match on call_sid first.
+    call = db.query(Call).filter(Call.call_sid == call_control_id).first()
+
+    # Fallback: the Telnyx Call Control v2 call_control_id and the TeXML
+    # CallSid we stored on Call.call_sid may have different formats. If exact
+    # match misses, try the most-recent unended call's owner — same logic as
+    # recording start in /api/calls/recording/start. Without this fallback the
+    # recording URL is never persisted and the Recordings tab stays empty.
+    if not call:
+        log.warning(
+            "recording-event: no Call matched call_sid=%r; trying most-recent unended fallback",
+            call_control_id,
+        )
+        call = (
+            db.query(Call)
+            .filter(Call.recording_url.is_(None))
+            .order_by(Call.started_at.desc())
+            .first()
+        )
+
+    if not call:
+        log.warning("recording-event: no Call row to attach recording_url to")
+        return Response(status_code=204)
+
+    call.recording_url = recording_url
+    try:
+        db.commit()
+        log.info(
+            "Recording URL saved: Call.id=%s call_sid=%s recording_url=%s",
+            call.id, call.call_sid, recording_url,
+        )
+    except Exception:
+        db.rollback()
+        log.exception("Failed to save recording URL for call.id=%s", call.id)
 
     return Response(status_code=204)

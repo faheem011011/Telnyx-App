@@ -304,18 +304,24 @@ def call_record_start(call_control_id: str) -> None:
     Timeout is bumped to 15s for resilience against slow Telnyx API responses.
     """
     _check_configured()
+    webhook_url = f"{settings.public_backend_url}/api/telnyx/recording-event"
     url = f"https://api.telnyx.com/v2/calls/{call_control_id}/actions/record_start"
+    log.info("call_record_start: call_control_id=%s webhook_url=%s", call_control_id, webhook_url)
     resp = httpx.post(
         url,
         json={
             "format": "mp3",
             "channels": "dual",
             "play_beep": True,
-            "webhook_url": f"{settings.public_backend_url}/api/telnyx/recording-event",
+            "webhook_url": webhook_url,
             "webhook_url_method": "POST",
         },
         headers=_cc_headers(),
         timeout=15,
+    )
+    log.info(
+        "call_record_start response: status=%d body_first_500=%s",
+        resp.status_code, resp.text[:500],
     )
     resp.raise_for_status()
 
