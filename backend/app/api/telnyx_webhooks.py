@@ -149,10 +149,25 @@ def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
 # ---------------------------------------------------------------------------
 
 def _verify_telnyx_signature(request: Request, raw_body: bytes) -> None:
-    """Verify the Telnyx Ed25519 signature on EVERY webhook (JSON or TeXML).
+    """Verify the Telnyx Ed25519 signature on JSON webhooks ONLY.
 
-    C-01/C-07: Telnyx signs all webhook deliveries (TeXML form-encoded too) with
-    the same Ed25519 key, signed over the raw body. We must:
+    Use on Call Control v2 / Messaging webhooks (e.g. /incoming-sms,
+    /recording-event). DO NOT call this on TeXML form-encoded webhooks
+    (/outbound-call, /incoming-call, /post-dial, /call-status,
+    /voicemail-complete, /voicemail-transcription) — Telnyx's TeXML
+    application does not include the Telnyx-Signature-Ed25519 header on
+    those deliveries, so verification will always 403 legitimate requests
+    and the call/SMS flow will silently fail.
+
+    The audit's C-01/C-07 originally widened this to all routes on the
+    premise that Telnyx signs every webhook the same way. That premise
+    was incorrect for TeXML in this Application Type, observed via the
+    Telnyx Debug page: three retries to /outbound-call all returned 403
+    from this verifier. TeXML routes are now unauthenticated at the
+    backend; future hardening: an IP allowlist of Telnyx's published
+    webhook source IPs.
+
+    Behavior on JSON routes:
       • Refuse-by-default when settings.telnyx_public_key is missing — no
         silent skip in production.
       • Verify the Ed25519 signature.
@@ -248,9 +263,8 @@ def _texml_event_id(route_name: str, form_data: dict) -> str:
 @router.post("/outbound-call")
 async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
     """Handle an outgoing call initiated from the browser via Telnyx WebRTC SDK."""
-    raw_body = await request.body()
-    _verify_telnyx_signature(request, raw_body)
-
+    # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
+    # this Telnyx app config — see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -314,9 +328,8 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
 @router.post("/incoming-call")
 async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     """Handle an incoming PSTN call to the Telnyx phone number."""
-    raw_body = await request.body()
-    _verify_telnyx_signature(request, raw_body)
-
+    # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
+    # this Telnyx app config — see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -395,9 +408,8 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
 @router.post("/post-dial")
 async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after <Dial> resolves for an inbound call."""
-    raw_body = await request.body()
-    _verify_telnyx_signature(request, raw_body)
-
+    # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
+    # this Telnyx app config — see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -445,9 +457,8 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
 @router.post("/call-status")
 async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     """Receive call lifecycle status updates from Telnyx."""
-    raw_body = await request.body()
-    _verify_telnyx_signature(request, raw_body)
-
+    # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
+    # this Telnyx app config — see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -493,9 +504,8 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
 @router.post("/voicemail-complete")
 async def handle_voicemail_complete(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after a voicemail recording finishes."""
-    raw_body = await request.body()
-    _verify_telnyx_signature(request, raw_body)
-
+    # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
+    # this Telnyx app config — see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -531,8 +541,9 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
 async def handle_voicemail_transcription(request: Request):
     # Telnyx TeXML <Record> does not support transcription callbacks — this
     # endpoint is kept so any stale webhook config doesn't cause 404 errors.
-    raw_body = await request.body()
-    _verify_telnyx_signature(request, raw_body)
+    # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
+    # this Telnyx app config — see _verify_telnyx_signature docstring.
+    await request.body()
     return Response(status_code=204)
 
 
