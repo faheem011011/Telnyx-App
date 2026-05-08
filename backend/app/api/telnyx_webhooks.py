@@ -111,26 +111,54 @@ def _resolve_user_by_to_number(to_number: str, db: Session) -> User | None:
 def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
     """Resolve the user making an outbound call from the browser.
 
-    Telnyx TeXML sends the SIP URI as ``From`` when calling from a WebRTC client
-    (e.g. ``sip:abc123def456@sip.telnyx.com``). The SIP username is assigned by
-    Telnyx when the ``TelephonyCredential`` is created — it is NOT a value the
-    client controls — and it gets persisted on ``User.telnyx_sip_username`` by
-    ``calls.get_voice_token`` on first token issuance. Resolve by matching that
-    column.
+    Telnyx populates the ``From`` field on browser-originated TeXML webhooks
+    in different ways depending on the Application configuration. Observed
+    forms:
+      • ``sip:<sip_username>@sip.telnyx.com``  (SIP credential URI)
+      • ``client:<sip_username>``              (Twilio-compat client identity)
+      • plain ``<sip_username>``               (no prefix)
+      • ``<E.164>``                            (caller phone number, e.g. +12015550100)
 
-    C-03: returns None when the SIP identity does not resolve — no fallback to
+    Strategy: strip known prefixes and the ``@host`` suffix, then try to match
+    by ``User.telnyx_sip_username`` first (canonical for browser WebRTC). If
+    that misses, fall back to ``User.phone_number`` (covers configs where
+    Telnyx populates the From field with the caller's E.164).
+
+    C-03: returns None when the identity does not resolve — no fallback to
     the "primary user". Callers must handle None gracefully.
     """
     if not from_field:
         return None
-    # SIP URI format: sip:<sip_username>@sip.telnyx.com → extract "<sip_username>"
-    sip_part = from_field.replace("sip:", "").split("@")[0].strip()
-    if not sip_part:
+    # Strip common prefixes Telnyx may include
+    s = from_field.strip()
+    for prefix in ("sip:", "client:", "tel:"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    # Strip @host suffix if present
+    s = s.split("@")[0].strip()
+    if not s:
         return None
+
+    # Try sip_username first (canonical for browser WebRTC calls)
     user = (
         db.query(User)
         .filter(
-            User.telnyx_sip_username == sip_part,
+            User.telnyx_sip_username == s,
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if user:
+        return user
+
+    # Fallback: match by phone_number — some Telnyx app configs populate
+    # the From field with the caller's E.164 instead of the SIP username.
+    user = (
+        db.query(User)
+        .filter(
+            User.phone_number == s,
             User.is_active.is_(True),
             User.deleted_at.is_(None),
         )
@@ -138,8 +166,8 @@ def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
     )
     if not user:
         log.warning(
-            "Outbound call: no active user matched SIP identity %r — call will be hung up",
-            from_field,
+            "Outbound call: no active user matched identity %r (normalized=%r)",
+            from_field, s,
         )
     return user
 
@@ -268,8 +296,21 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     form_data = dict(form)
 
+    # DIAGNOSTIC: dump full payload so we can see what Telnyx actually sends
+    # for browser-originated calls in this Application setup. Remove once the
+    # caller-resolution path is stable.
+    log.info("outbound-call payload keys=%s payload=%s", sorted(form_data.keys()), form_data)
+
     to_number = form_data.get("To", "")
-    from_field = form_data.get("From", "")
+    # Try multiple field names — different Telnyx configurations populate
+    # different fields for the calling identity on browser-originated calls.
+    from_field = (
+        form_data.get("From")
+        or form_data.get("Caller")
+        or form_data.get("FromSipUri")
+        or form_data.get("FromUri")
+        or ""
+    )
     call_sid = form_data.get("CallSid")
 
     # C-06: dedupe before mutating any state.
@@ -279,7 +320,10 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
     user = _resolve_user_by_caller(from_field, db)
 
     if not user:
-        log.warning("Outbound call rejected: no user found for From=%s", from_field)
+        log.warning(
+            "Outbound call rejected: no user found for from_field=%r (form keys=%s)",
+            from_field, sorted(form_data.keys()),
+        )
         return _xml(
             "<Response>"
             '<Say voice="Polly.Joanna">Your account was not found. '
