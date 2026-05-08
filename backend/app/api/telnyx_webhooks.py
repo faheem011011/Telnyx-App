@@ -50,6 +50,9 @@ from app.services.telnyx_service import (
     build_incoming_texml,
     build_outgoing_texml,
     build_voicemail_texml,
+    call_answer,
+    call_hangup,
+    call_transfer,
 )
 
 log = logging.getLogger(__name__)
@@ -290,48 +293,39 @@ def _texml_event_id(route_name: str, form_data: dict) -> str:
 
 @router.post("/outbound-call")
 async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
-    """Handle an outgoing call initiated from the browser via Telnyx WebRTC SDK."""
-    # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
-    # this Telnyx app config — see _verify_telnyx_signature docstring.
+    """Handle an outgoing call initiated from the browser via Telnyx WebRTC SDK.
 
-    # DIAGNOSTIC: log raw body + content-type + key headers so we can tell
-    # whether Telnyx is sending TeXML form data (works), JSON (Voice API
-    # mode), or empty body (SIP-layer reject). Remove once stable.
+    Dispatches by Content-Type:
+      • application/json → Call Control v2 event (when SIP Connection is in
+        Programmable Voice mode). Handled by ``_handle_outbound_call_v2``.
+      • everything else  → TeXML form-encoded (the original design path).
+    """
     raw_body = await request.body()
     content_type = request.headers.get("content-type", "")
-    user_agent = request.headers.get("user-agent", "")
+
     log.info(
-        "outbound-call diagnostic: content_type=%r length=%d body_first_500=%r ua=%r",
-        content_type, len(raw_body), raw_body[:500], user_agent,
+        "outbound-call diagnostic: content_type=%r length=%d body_first_500=%r",
+        content_type, len(raw_body), raw_body[:500],
     )
 
+    if "application/json" in content_type:
+        return await _handle_outbound_call_v2(db, raw_body)
+
+    return await _handle_outbound_call_texml(request, db)
+
+
+async def _handle_outbound_call_texml(request: Request, db: Session) -> Response:
+    """TeXML form-encoded outbound webhook handler. Original design path.
+
+    Telnyx sends ``CallSid``, ``From``, ``To`` etc. as form fields; we respond
+    with TeXML markup containing ``<Dial>`` to instruct Telnyx to bridge the
+    call to the destination.
+    """
     form = await request.form()
     form_data = dict(form)
-
-    # DIAGNOSTIC: dump form payload so we can see what Telnyx actually sends
-    # for browser-originated calls in this Application setup. Remove once the
-    # caller-resolution path is stable.
-    log.info("outbound-call payload keys=%s payload=%s", sorted(form_data.keys()), form_data)
-
-    # If form parsing yielded nothing but raw body is JSON, try parsing as
-    # Call Control v2 event so we at least see the from/to/call_id.
-    if not form_data and raw_body:
-        try:
-            json_body = json.loads(raw_body)
-            payload = json_body.get("data", {}).get("payload", {}) or json_body.get("payload", {})
-            log.info(
-                "outbound-call JSON-parsed: event_type=%r from=%r to=%r call_control_id=%r",
-                json_body.get("data", {}).get("event_type") or json_body.get("event_type"),
-                payload.get("from") or payload.get("from_sip_uri"),
-                payload.get("to") or payload.get("to_sip_uri"),
-                payload.get("call_control_id"),
-            )
-        except Exception:
-            log.info("outbound-call: body is neither form nor JSON")
+    log.info("outbound-call texml: payload keys=%s", sorted(form_data.keys()))
 
     to_number = form_data.get("To", "")
-    # Try multiple field names — different Telnyx configurations populate
-    # different fields for the calling identity on browser-originated calls.
     from_field = (
         form_data.get("From")
         or form_data.get("Caller")
@@ -346,12 +340,8 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
         return _xml("<Response></Response>")
 
     user = _resolve_user_by_caller(from_field, db)
-
     if not user:
-        log.warning(
-            "Outbound call rejected: no user found for from_field=%r (form keys=%s)",
-            from_field, sorted(form_data.keys()),
-        )
+        log.warning("texml outbound rejected: no user for from=%r", from_field)
         return _xml(
             "<Response>"
             '<Say voice="Polly.Joanna">Your account was not found. '
@@ -362,7 +352,7 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
 
     caller_id = user.phone_number
     if not caller_id:
-        log.warning("Outbound call rejected: user %s has no phone number assigned", user.id)
+        log.warning("texml outbound rejected: user %s has no phone number", user.id)
         return _xml(
             "<Response>"
             '<Say voice="Polly.Joanna">Your account has no phone number assigned. '
@@ -385,12 +375,192 @@ async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
             )
             db.add(call)
             db.commit()
-            log.info("Outbound call created: SID=%s user=%s to=%s", call_sid, user.id, to_number)
+            log.info("Outbound call created (texml): SID=%s user=%s to=%s", call_sid, user.id, to_number)
         except Exception:
             db.rollback()
-            log.exception("Failed to persist outbound call record SID=%s", call_sid)
+            log.exception("Failed to persist texml outbound Call SID=%s", call_sid)
 
     return _xml(build_outgoing_texml(to_number, caller_id=caller_id))
+
+
+# ---------------------------------------------------------------------------
+# Call Control v2 outbound handler
+#
+# Used when the SIP Connection is in Programmable Voice mode. Telnyx fires
+# JSON events to /outbound-call instead of TeXML form posts. Flow:
+#
+#   1. Browser SDK opens SIP INVITE to Telnyx with destination number.
+#   2. Telnyx fires call.initiated event to this webhook with:
+#        from = user's caller-id phone number (per WebRTC SDK callerNumber)
+#        to   = destination phone number (E.164)
+#   3. We resolve the user, persist a Call row, then issue:
+#        POST /v2/calls/{id}/actions/answer    — accept the SIP leg
+#        POST /v2/calls/{id}/actions/transfer  — atomically dials & bridges PSTN
+#   4. Telnyx fires call.answered when destination picks up; we update status.
+#   5. Telnyx fires call.hangup when either side hangs up; we mark Call ended.
+#
+# The same webhook also receives events for the secondary leg of inbound
+# calls (TeXML's <Dial><Sip/></Dial> creates an outbound-direction SIP leg
+# from Telnyx's perspective, also fires events here). We distinguish by
+# checking whether ``to`` looks like an E.164 number — only PSTN-bound calls
+# get the dial+transfer treatment; SIP-credential targets are ignored.
+# ---------------------------------------------------------------------------
+
+async def _handle_outbound_call_v2(db: Session, raw_body: bytes) -> Response:
+    try:
+        body = json.loads(raw_body)
+    except Exception:
+        log.warning("outbound-call v2: body is not JSON, ignoring")
+        return Response(status_code=204)
+
+    data = body.get("data", {})
+    event_type = data.get("event_type", "")
+    payload = data.get("payload", {}) or {}
+    call_control_id = payload.get("call_control_id") or ""
+
+    # C-06: dedupe by Telnyx event id.
+    event_id = data.get("id") or ""
+    if event_id and not _claim_event(db, event_id, event_type or "outbound-call-v2"):
+        return Response(status_code=204)
+
+    if not call_control_id:
+        log.info("outbound-call v2: no call_control_id, ignoring event=%s", event_type)
+        return Response(status_code=204)
+
+    log.info(
+        "outbound-call v2: event=%s call_control_id=%s from=%r to=%r",
+        event_type, call_control_id, payload.get("from"), payload.get("to"),
+    )
+
+    if event_type == "call.initiated":
+        return await _v2_handle_initiated(db, payload, call_control_id)
+    if event_type == "call.answered":
+        return _v2_handle_answered(db, call_control_id)
+    if event_type == "call.hangup":
+        return _v2_handle_hangup(db, payload, call_control_id)
+    return Response(status_code=204)
+
+
+async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str) -> Response:
+    from_field = (payload.get("from") or "").strip()
+    to_field = (payload.get("to") or "").strip()
+
+    # Filter: only handle PSTN-bound calls. SIP-credential targets (e.g.
+    # 'gencredAbc...') are the secondary leg of an inbound call and are
+    # already handled by the TeXML inbound flow — leave them alone.
+    if not to_field.startswith("+"):
+        log.info("v2: skipping non-PSTN call.initiated (to=%r)", to_field)
+        return Response(status_code=204)
+
+    user = _resolve_user_by_caller(from_field, db)
+    if not user:
+        log.warning("v2 outbound rejected: no user for from=%r", from_field)
+        call_hangup(call_control_id)
+        return Response(status_code=204)
+
+    caller_id = user.phone_number
+    if not caller_id:
+        log.warning("v2 outbound rejected: user %s has no phone number", user.id)
+        call_hangup(call_control_id)
+        return Response(status_code=204)
+
+    # Persist the Call row before issuing actions, so even if Telnyx replies
+    # late we have a record. Use IntegrityError tolerance for retries.
+    try:
+        call = Call(
+            owner_id=user.id,
+            call_sid=call_control_id,
+            direction="outbound",
+            from_number=caller_id,
+            to_number=to_field,
+            status="initiated",
+            started_at=_now(),
+            is_read=True,
+        )
+        db.add(call)
+        db.commit()
+        log.info("v2 outbound Call created: id=%s SID=%s user=%s to=%s",
+                 call.id, call_control_id, user.id, to_field)
+    except IntegrityError:
+        db.rollback()
+        log.info("v2 outbound: Call row already exists for SID=%s (retry)", call_control_id)
+    except Exception:
+        db.rollback()
+        log.exception("v2 outbound: failed to persist Call SID=%s", call_control_id)
+
+    # Answer the inbound SIP leg, then transfer to PSTN destination. Telnyx
+    # auto-bridges the two legs once the PSTN side picks up.
+    try:
+        call_answer(call_control_id)
+    except Exception:
+        log.exception("v2 outbound: answer failed for %s", call_control_id)
+        call_hangup(call_control_id)
+        return Response(status_code=204)
+
+    try:
+        call_transfer(call_control_id, to_number=to_field, from_number=caller_id)
+        log.info("v2 outbound: transfer issued SIP_leg=%s to=%s caller_id=%s",
+                 call_control_id, to_field, caller_id)
+    except Exception:
+        log.exception("v2 outbound: transfer failed for %s", call_control_id)
+        call_hangup(call_control_id)
+
+    return Response(status_code=204)
+
+
+def _v2_handle_answered(db: Session, call_control_id: str) -> Response:
+    call = db.query(Call).filter(Call.call_sid == call_control_id).first()
+    if call:
+        call.status = "in-progress"
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.exception("v2 answered: failed to update Call SID=%s", call_control_id)
+    return Response(status_code=204)
+
+
+def _v2_handle_hangup(db: Session, payload: dict, call_control_id: str) -> Response:
+    call = db.query(Call).filter(Call.call_sid == call_control_id).first()
+    if not call:
+        return Response(status_code=204)
+
+    if not call.ended_at:
+        call.ended_at = _now()
+
+    hangup_cause = payload.get("hangup_cause") or ""
+    # Map Telnyx hangup_cause to our coarse status set.
+    if hangup_cause == "normal_clearing":
+        # Treat as completed only if the call was actually answered.
+        call.status = "completed" if call.status == "in-progress" else "missed"
+    elif hangup_cause in ("call_rejected", "user_busy", "callee_busy"):
+        call.status = "busy"
+    elif hangup_cause in ("no_answer", "no_user_response"):
+        call.status = "no-answer"
+    elif hangup_cause in ("originator_cancel",):
+        call.status = "missed"
+    else:
+        # Default — keep current unless still 'initiated'/'ringing'
+        if call.status in ("initiated", "ringing", None):
+            call.status = "failed"
+
+    duration_raw = payload.get("call_duration_secs")
+    try:
+        duration = int(duration_raw) if duration_raw is not None else 0
+    except (TypeError, ValueError):
+        duration = 0
+    if duration and duration > (call.duration_seconds or 0):
+        call.duration_seconds = duration
+
+    try:
+        db.commit()
+        log.info("v2 hangup: Call SID=%s status=%s cause=%s",
+                 call_control_id, call.status, hangup_cause)
+    except Exception:
+        db.rollback()
+        log.exception("v2 hangup: failed to update Call SID=%s", call_control_id)
+
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------

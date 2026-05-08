@@ -340,6 +340,50 @@ def call_record_stop(call_control_id: str) -> None:
 
 
 # ============================================================
+# Call Control v2 — outbound dial (used when SIP Connection is in
+# Programmable Voice mode rather than TeXML mode). The browser SDK calls
+# Telnyx with a SIP INVITE; Telnyx fires call.initiated as JSON to our
+# webhook; we then issue answer + transfer to bridge to the destination.
+# ============================================================
+
+def call_answer(call_control_id: str) -> None:
+    """Answer an incoming SIP call leg (the credential→Telnyx leg)."""
+    _check_configured()
+    url = f"https://api.telnyx.com/v2/calls/{call_control_id}/actions/answer"
+    log.info("call_answer: call_control_id=%s", call_control_id)
+    resp = httpx.post(url, json={}, headers=_cc_headers(), timeout=15)
+    log.info("call_answer response: status=%d body=%s", resp.status_code, resp.text[:300])
+    resp.raise_for_status()
+
+
+def call_transfer(call_control_id: str, to_number: str, from_number: str) -> None:
+    """Transfer the answered call leg to ``to_number``.
+
+    Telnyx atomically dials the destination and bridges audio. This is the
+    one-shot way to wire a SIP credential's outbound call to PSTN without
+    manually managing a second call leg.
+    """
+    _check_configured()
+    url = f"https://api.telnyx.com/v2/calls/{call_control_id}/actions/transfer"
+    body = {"to": to_number, "from": from_number}
+    log.info("call_transfer: call_control_id=%s body=%s", call_control_id, body)
+    resp = httpx.post(url, json=body, headers=_cc_headers(), timeout=15)
+    log.info("call_transfer response: status=%d body=%s", resp.status_code, resp.text[:300])
+    resp.raise_for_status()
+
+
+def call_hangup(call_control_id: str) -> None:
+    """Hang up a call leg (best-effort; never raises)."""
+    _check_configured()
+    url = f"https://api.telnyx.com/v2/calls/{call_control_id}/actions/hangup"
+    try:
+        resp = httpx.post(url, json={}, headers=_cc_headers(), timeout=10)
+        log.info("call_hangup: call_control_id=%s status=%d", call_control_id, resp.status_code)
+    except Exception:
+        log.exception("call_hangup failed for %s", call_control_id)
+
+
+# ============================================================
 # TeXML builders (Telnyx equivalent of TwiML)
 # ============================================================
 
