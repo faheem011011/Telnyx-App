@@ -64,6 +64,10 @@ export const callsApi = {
     api.post('/api/calls/recording/start', { call_sid: callSid }).then((r) => r.data),
   stopRecording: (callSid) =>
     api.post('/api/calls/recording/stop', { call_sid: callSid }).then((r) => r.data),
+  // Mints a fresh Telnyx signed URL — needed because the cached recording_url
+  // is a 10-minute pre-signed S3 link that 403s after it expires.
+  recordingUrl: (id) =>
+    api.get(`/api/calls/${id}/recording-url`).then((r) => r.data),
 };
 
 // ============================================================

@@ -930,12 +930,13 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
 
     payload = event.get("payload", {})
     call_control_id = payload.get("call_control_id")
+    recording_id = payload.get("recording_id") or payload.get("id")
     recording_urls = payload.get("recording_urls") or {}
     recording_url = recording_urls.get("mp3") or recording_urls.get("wav")
 
     log.info(
-        "recording-event call.recording.saved: call_control_id=%r recording_urls=%s",
-        call_control_id, recording_urls,
+        "recording-event call.recording.saved: call_control_id=%r recording_id=%r recording_urls=%s",
+        call_control_id, recording_id, recording_urls,
     )
 
     if not (call_control_id and recording_url):
@@ -967,11 +968,15 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
         return Response(status_code=204)
 
     call.recording_url = recording_url
+    # Keep the stable recording_id so we can mint a fresh signed URL when the
+    # pre-signed S3 link in recording_url expires (~10 minutes after delivery).
+    if recording_id:
+        call.recording_id = recording_id
     try:
         db.commit()
         log.info(
-            "Recording URL saved: Call.id=%s call_sid=%s recording_url=%s",
-            call.id, call.call_sid, recording_url,
+            "Recording saved: Call.id=%s call_sid=%s recording_id=%s",
+            call.id, call.call_sid, recording_id,
         )
     except Exception:
         db.rollback()

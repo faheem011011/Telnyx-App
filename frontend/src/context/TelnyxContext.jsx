@@ -27,6 +27,54 @@ const TELNYX_DEFAULTS = {
 
 const TERMINAL_STATES = new Set(['hangup', 'destroy', 'purge']);
 
+// SIP/Telnyx cause strings that indicate "the call failed to set up"
+// rather than "the remote party didn't pick up". The SDK exposes these on
+// the terminal call notification as `call.cause` (string) and `call.causeCode`
+// (numeric Q.850 cause code).
+//   408 NO_USER_RESPONSE / 480 TEMPORARILY_UNAVAILABLE — true no-answer
+//   486 USER_BUSY / 600 BUSY                            — busy
+//   404 UNALLOCATED_NUMBER / 503 SERVICE_UNAVAILABLE    — routing failure
+//   603 DECLINE / 487 REQUEST_TERMINATED                — rejected or cancelled
+const FAILURE_CAUSES = new Set([
+  'CALL_REJECTED',
+  'UNALLOCATED_NUMBER',
+  'NO_ROUTE_DESTINATION',
+  'NO_ROUTE_TRANSIT_NET',
+  'INCOMPATIBLE_DESTINATION',
+  'SERVICE_UNAVAILABLE',
+  'NETWORK_OUT_OF_ORDER',
+  'NORMAL_TEMPORARY_FAILURE',
+  'RECOVERY_ON_TIMER_EXPIRE',
+  'BEARERCAPABILITY_NOTAUTH',
+  'BEARERCAPABILITY_NOTAVAIL',
+  'CHAN_NOT_IMPLEMENTED',
+  'FACILITY_NOT_IMPLEMENTED',
+  'REQUESTED_CHAN_UNAVAIL',
+]);
+
+function classifyTerminalCause(call) {
+  // Telnyx SDK exposes either `cause` (string), `causeCode` (number),
+  // or hangs both on `call.cause` / `call.params.cause`. Be defensive.
+  const cause =
+    (call?.cause ||
+      call?.params?.cause ||
+      call?.options?.cause ||
+      '')
+      .toString()
+      .toUpperCase();
+  const code = Number(call?.causeCode ?? call?.params?.causeCode ?? 0) || 0;
+
+  if (cause === 'USER_BUSY' || code === 486 || code === 600) {
+    return { type: 'failed', message: 'Line busy', cause, code };
+  }
+  if (FAILURE_CAUSES.has(cause) || (code >= 400 && code !== 408 && code !== 480 && code !== 487)) {
+    return { type: 'failed', message: `Call failed (${cause || `code ${code}`})`, cause, code };
+  }
+  // Fall back to the "didn't pick up" bucket — covers NO_USER_RESPONSE,
+  // ORIGINATOR_CANCEL, NORMAL_CLEARING-before-active, etc.
+  return { type: 'no-answer', message: 'No answer', cause, code };
+}
+
 // ─── Toast shown when the remote side ends / drops a call ────────────────────
 const NOTIFICATION_STYLES = {
   ended:        { bg: '#1e293b', border: '#334155', icon: '#94a3b8',  Icon: PhoneOff },
@@ -79,6 +127,11 @@ export function TelnyxProvider({ children }) {
   const userHangupRef       = useRef(false);
   // answeredCallIdRef: guard against the SDK re-firing 'ringing' after answer()
   const answeredCallIdRef   = useRef(null);
+  // micStreamRef: the MediaStream we open with getUserMedia before newCall().
+  //   On failed call setups the Telnyx SDK does not always release the mic
+  //   tracks, so the browser keeps the "microphone in use" indicator on. We
+  //   keep an explicit handle and stop the tracks ourselves on terminal state.
+  const micStreamRef        = useRef(null);
 
   const [deviceReady,       setDeviceReady]       = useState(false);
   const [deviceError,       setDeviceError]       = useState(null);
@@ -109,6 +162,21 @@ export function TelnyxProvider({ children }) {
     el.play().catch((err) => console.warn('[Telnyx] audio play blocked:', err));
   }, []);
 
+  // Stop any MediaStreamTrack we (or the SDK) opened so the browser drops the
+  // "microphone in use" indicator. Safe to call multiple times.
+  const releaseLocalMedia = useCallback((call) => {
+    const sdkLocal = call?.options?.localStream || call?.localStream;
+    [sdkLocal, micStreamRef.current].forEach((stream) => {
+      if (!stream) return;
+      try {
+        stream.getTracks().forEach((t) => {
+          try { t.stop(); } catch (_) {}
+        });
+      } catch (_) {}
+    });
+    micStreamRef.current = null;
+  }, []);
+
   const clearCallState = useCallback(() => {
     setActiveCall(null);
     setActiveCallInfo(null);
@@ -122,15 +190,17 @@ export function TelnyxProvider({ children }) {
   // (WebSocket drop, SDK error, etc.) and optionally show a notification.
   const _forceCleanup = useCallback((message) => {
     const wasConn = wasConnectedRef.current;
+    const dyingCall = activeCallRef.current;
     activeCallRef.current   = null;
     wasConnectedRef.current = false;
     userHangupRef.current   = false;
+    releaseLocalMedia(dyingCall);
     clearCallState();
     setCallNotification({
       type: wasConn ? 'disconnected' : 'failed',
       message,
     });
-  }, [clearCallState]);
+  }, [clearCallState, releaseLocalMedia]);
 
   // ── SDK initialisation / token refresh ─────────────────────────────────────
   useEffect(() => {
@@ -223,6 +293,12 @@ export function TelnyxProvider({ children }) {
 
           // ── Terminal ──────────────────────────────────────────────────────
           if (TERMINAL_STATES.has(state)) {
+            // Release the mic immediately — the SDK does not reliably stop the
+            // local stream when a call fails before reaching 'active' (e.g. the
+            // connection has no outbound webhook configured and Telnyx replies
+            // 503/CALL_REJECTED). Without this, the browser shows the mic-in-use
+            // indicator until the tab is reloaded.
+            releaseLocalMedia(call);
             activeCallRef.current = null;
             if (!cancelled) {
               const wasConn      = wasConnectedRef.current;
@@ -230,12 +306,35 @@ export function TelnyxProvider({ children }) {
               wasConnectedRef.current = false;
               userHangupRef.current   = false;
 
+              // Log the SDK cause/causeCode so the real reason behind an instant
+              // failure is visible in the browser console. Common values:
+              //   USER_BUSY                    — destination busy
+              //   NO_USER_RESPONSE             — rang, never picked up
+              //   ORIGINATOR_CANCEL            — caller hung up before pickup
+              //   CALL_REJECTED / 603          — Telnyx routing rejected the call
+              //   NO_ROUTE_DESTINATION         — no outbound voice webhook is
+              //                                  configured on the Telnyx
+              //                                  Connection (the most common
+              //                                  cause of "instant No answer"
+              //                                  for fresh setups).
+              const causeStr =
+                call?.cause || call?.params?.cause || call?.options?.cause;
+              const causeCode =
+                call?.causeCode ?? call?.params?.causeCode ?? null;
+              if (!wasConn && call.direction === 'outbound') {
+                console.warn(
+                  '[Telnyx] Outbound call ended before connecting',
+                  { cause: causeStr, causeCode, callId: call?.id },
+                );
+              }
+
               // Only notify when the remote side ended the call
               if (!wasUserHangup) {
                 if (wasConn) {
                   setCallNotification({ type: 'ended', message: 'Call ended' });
                 } else if (call.direction === 'outbound') {
-                  setCallNotification({ type: 'no-answer', message: 'No answer' });
+                  const cls = classifyTerminalCause(call);
+                  setCallNotification({ type: cls.type, message: cls.message });
                 }
               }
 
@@ -273,11 +372,12 @@ export function TelnyxProvider({ children }) {
     return () => {
       cancelled = true;
       clearTimeout(refreshTimerRef.current);
+      releaseLocalMedia(activeCallRef.current);
       if (client) { try { client.disconnect(); } catch (e) { console.warn('[Telnyx] disconnect on cleanup failed', e); } }
       clientRef.current = null;
       setDeviceReady(false);
     };
-  }, [user, tokenVersion, attachAudio, clearCallState, _forceCleanup]);
+  }, [user, tokenVersion, attachAudio, clearCallState, _forceCleanup, releaseLocalMedia]);
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -285,8 +385,12 @@ export function TelnyxProvider({ children }) {
     if (!clientRef.current || !deviceReady) {
       throw new Error('Phone not ready. Try again in a moment.');
     }
+    // Open the mic ourselves and hold onto the stream so we can guarantee it
+    // gets stopped on terminal state. The SDK opens its own internal stream
+    // but does not always release it on failed setups, leaving the browser's
+    // microphone indicator stuck until reload.
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (_) {
       throw new Error('Microphone access denied. Allow microphone access in your browser and try again.');
     }
@@ -351,8 +455,9 @@ export function TelnyxProvider({ children }) {
   const rejectIncoming = useCallback(() => {
     if (!incomingCall) return;
     try { incomingCall.hangup(); } catch (e) { console.warn('[Telnyx] reject hangup failed', e); }
+    releaseLocalMedia(incomingCall);
     setIncomingCall(null);
-  }, [incomingCall]);
+  }, [incomingCall, releaseLocalMedia]);
 
   const hangup = useCallback(() => {
     // Mark user-initiated so the terminal handler doesn't show "Call ended" toast
@@ -370,7 +475,10 @@ export function TelnyxProvider({ children }) {
     if (callToHang) {
       try { callToHang.hangup(); } catch (e) { console.warn('[Telnyx] hangup failed', e); }
     }
-  }, [clearCallState]); // No longer depends on activeCall state — stale-closure-safe
+    // Always release mic tracks — even if the SDK call object was already gone
+    // or hangup() threw, we own the getUserMedia stream and must close it.
+    releaseLocalMedia(callToHang);
+  }, [clearCallState, releaseLocalMedia]); // No longer depends on activeCall state — stale-closure-safe
 
   const toggleMute = useCallback(() => {
     const call = activeCallRef.current;

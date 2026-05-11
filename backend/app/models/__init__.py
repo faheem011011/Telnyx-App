@@ -110,7 +110,12 @@ class Call(Base):
     to_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), default="pending")
     duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    # recording_url holds the most recent signed URL Telnyx returned. It expires
+    # ~10 min after the call.recording.saved webhook fires, so we cache the
+    # Telnyx recording_id alongside it and refresh on demand via the
+    # /api/calls/{id}/recording-url endpoint.
     recording_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    recording_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     voicemail_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     voicemail_transcription: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)

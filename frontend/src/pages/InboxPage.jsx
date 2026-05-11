@@ -256,6 +256,30 @@ function CallRow({ call, selected, onSelect, onCallBack, onToggleStar }) {
 function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
   const otherNumber = call.direction === 'inbound' ? call.from_number : call.to_number;
   const displayName = call.contact?.name || formatPhone(otherNumber);
+  const [recordingSrc, setRecordingSrc] = useState(null);
+  const [recordingError, setRecordingError] = useState(null);
+
+  // Fetch a fresh signed URL on demand. The recording_url stored on the call
+  // row is a 10-minute pre-signed S3 link that 403s after expiry, so we hit
+  // the backend which re-signs via Telnyx every time the user opens a call.
+  useEffect(() => {
+    setRecordingSrc(null);
+    setRecordingError(null);
+    if (!call.recording_url) return;
+    let cancelled = false;
+    callsApi.recordingUrl(call.id)
+      .then(({ url }) => { if (!cancelled) setRecordingSrc(url); })
+      .catch((err) => {
+        if (cancelled) return;
+        // Fall back to the cached URL — still works inside the 10-minute window.
+        if (err.response?.status === 404) {
+          setRecordingError('Recording no longer available.');
+        } else {
+          setRecordingSrc(call.recording_url);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [call.id, call.recording_url]);
 
   return (
     <div
@@ -335,12 +359,13 @@ function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
             <div className="text-xs uppercase tracking-wider font-semibold text-muted mb-2">
               Call recording
             </div>
-            <audio
-              controls
-              src={call.recording_url}
-              className="w-full h-10"
-              onError={(e) => { e.target.src = `${call.recording_url}.mp3`; }}
-            />
+            {recordingError ? (
+              <div className="text-sm text-muted">{recordingError}</div>
+            ) : recordingSrc ? (
+              <audio controls src={recordingSrc} className="w-full h-10" />
+            ) : (
+              <div className="text-sm text-muted">Loading recording…</div>
+            )}
           </section>
         )}
 

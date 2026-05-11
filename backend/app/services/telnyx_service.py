@@ -339,6 +339,37 @@ def call_record_stop(call_control_id: str) -> None:
     resp.raise_for_status()
 
 
+def fetch_recording_url(recording_id: str) -> str | None:
+    """Return a fresh signed download URL (mp3 preferred, wav fallback).
+
+    Telnyx mints a new short-lived S3 URL on every GET /v2/recordings/{id},
+    which is how we work around the 403 the webhook's URL gets once its ~10
+    minute window closes. Returns None if Telnyx no longer has the recording
+    or the lookup fails — callers should surface that as "recording
+    unavailable" rather than a generic 500.
+    """
+    _check_configured()
+    if not recording_id:
+        return None
+    url = f"https://api.telnyx.com/v2/recordings/{recording_id}"
+    try:
+        resp = httpx.get(url, headers=_cc_headers(), timeout=15)
+    except Exception:
+        log.exception("fetch_recording_url: request failed for id=%s", recording_id)
+        return None
+    if resp.status_code == 404:
+        return None
+    if not resp.is_success:
+        log.warning(
+            "fetch_recording_url: status=%d body=%s",
+            resp.status_code, resp.text[:300],
+        )
+        return None
+    data = (resp.json() or {}).get("data") or {}
+    urls = data.get("download_urls") or data.get("recording_urls") or {}
+    return urls.get("mp3") or urls.get("wav") or None
+
+
 # ============================================================
 # Call Control v2 — outbound dial (used when SIP Connection is in
 # Programmable Voice mode rather than TeXML mode). The browser SDK calls

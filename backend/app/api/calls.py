@@ -13,6 +13,7 @@ from app.services.telnyx_service import (
     generate_voice_access_token,
     call_record_start,
     call_record_stop,
+    fetch_recording_url,
 )
 
 log = logging.getLogger(__name__)
@@ -277,6 +278,49 @@ def stop_recording(
             status_code=502,
             detail="Recording service unavailable. Please try again or contact support.",
         )
+
+
+@router.get("/{call_id}/recording-url")
+def get_recording_url(
+    call_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mint a fresh signed download URL for the call recording.
+
+    The pre-signed S3 URL Telnyx delivers on call.recording.saved expires
+    ~10 min later, so cached URLs in the DB return 403 once the window
+    closes. This endpoint hits Telnyx's /v2/recordings/{id} on every call,
+    which re-signs the underlying object and hands back a fresh URL we can
+    feed directly to an <audio> tag.
+    """
+    call = db.query(Call).filter(
+        Call.id == call_id,
+        Call.owner_id == current_user.id,
+    ).first()
+    if not call:
+        raise HTTPException(status_code=404, detail="Call not found")
+    if not call.recording_id:
+        # Fall back to whatever URL we have on file — it may still be within
+        # the original 10-minute window (e.g. the user just hung up).
+        if call.recording_url:
+            return {"url": call.recording_url}
+        raise HTTPException(status_code=404, detail="No recording for this call")
+
+    url = fetch_recording_url(call.recording_id)
+    if not url:
+        raise HTTPException(
+            status_code=404,
+            detail="Recording is no longer available from Telnyx",
+        )
+    # Refresh the cached URL opportunistically — saves a round-trip if the
+    # same user replays within the next ten minutes.
+    call.recording_url = url
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+    return {"url": url}
 
 
 @router.delete("/{call_id}", status_code=status.HTTP_204_NO_CONTENT)
