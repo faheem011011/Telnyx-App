@@ -10,6 +10,7 @@ from app.models import Call, Contact, User
 from app.schemas import CallOut, CallUpdate, ContactOut, RecordingControlRequest, VoiceTokenResponse
 from app.services.deps import get_current_user
 from app.services.telnyx_service import (
+    TelnyxApiError,
     generate_voice_access_token,
     call_record_start,
     call_record_stop,
@@ -83,6 +84,18 @@ def get_voice_token(
     try:
         token, cred_id, sip_username = generate_voice_access_token(
             existing_credential_id=existing_credential_id,
+        )
+    except TelnyxApiError as e:
+        # Surface the upstream Telnyx error so operators can debug config
+        # problems (e.g. wrong connection_id, missing Outbound Voice Profile
+        # on a freshly-created TeXML App) without needing Railway log access.
+        log.error(
+            "Telnyx voice token generation failed for user_id=%s: %s",
+            current_user.id, e,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Telnyx {e.endpoint} returned {e.status}: {e.reason}",
         )
     except Exception:
         log.exception("Telnyx voice token generation failed for user_id=%s", current_user.id)

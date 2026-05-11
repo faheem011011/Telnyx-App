@@ -10,6 +10,43 @@ from app.config import settings
 
 log = logging.getLogger(__name__)
 
+
+class TelnyxApiError(Exception):
+    """Raised when a Telnyx REST call returns a non-success status.
+
+    Carries the upstream HTTP status and a short reason so the API layer can
+    surface a useful detail in 502 responses instead of an opaque "Voice
+    service unavailable." message. Operators flipping connection_id at deploy
+    time need this — the real Telnyx error is otherwise buried in Railway
+    logs.
+    """
+
+    def __init__(self, status: int, reason: str, *, endpoint: str = ""):
+        self.status = status
+        self.reason = reason
+        self.endpoint = endpoint
+        super().__init__(f"Telnyx {endpoint} -> {status}: {reason}")
+
+
+def _telnyx_error_reason(resp: httpx.Response) -> str:
+    """Extract a short human-readable reason from a Telnyx error response.
+
+    Telnyx returns JSON like {"errors": [{"code": "...", "title": "...",
+    "detail": "..."}]}. Fall back to the raw body when JSON parsing fails.
+    """
+    try:
+        data = resp.json()
+    except Exception:
+        return resp.text[:300]
+    errors = (data or {}).get("errors") or []
+    if errors and isinstance(errors[0], dict):
+        first = errors[0]
+        detail = first.get("detail") or first.get("title") or ""
+        code = first.get("code") or ""
+        return f"{code}: {detail}".strip(": ") or resp.text[:300]
+    return resp.text[:300]
+
+
 # Validation regexes for TeXML interpolated values (C-02).
 #   _PHONE_RE — used for "to_number" and "caller_id" (E.164-ish).
 #   _SIP_USER_RE — looser; SIP usernames may not be E.164.
@@ -97,10 +134,13 @@ def generate_voice_access_token(
             json={"connection_id": str(settings.telnyx_connection_id)},
             timeout=15,
         )
-        # M-09: surface failures immediately rather than waiting for the next call.
-        r.raise_for_status()
         if not r.is_success:
-            raise ValueError(f"Telnyx credential create failed ({r.status_code}): {r.text}")
+            reason = _telnyx_error_reason(r)
+            log.error(
+                "Telnyx /telephony_credentials failed (connection_id=%s): %d %s",
+                settings.telnyx_connection_id, r.status_code, reason,
+            )
+            raise TelnyxApiError(r.status_code, reason, endpoint="/telephony_credentials")
         data = r.json()["data"]
         credential_id = data["id"]
         raw = data.get("sip_username") or data.get("resource_name") or ""
@@ -111,10 +151,15 @@ def generate_voice_access_token(
         headers=headers,
         timeout=15,
     )
-    # M-09: fail fast on token-create errors.
-    r.raise_for_status()
     if not r.is_success:
-        raise ValueError(f"Telnyx token create failed ({r.status_code}): {r.text}")
+        reason = _telnyx_error_reason(r)
+        log.error(
+            "Telnyx /telephony_credentials/%s/token failed: %d %s",
+            credential_id, r.status_code, reason,
+        )
+        raise TelnyxApiError(
+            r.status_code, reason, endpoint=f"/telephony_credentials/{credential_id}/token"
+        )
 
     token = r.text.strip().strip('"')
     return token, credential_id, sip_username
