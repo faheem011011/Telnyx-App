@@ -86,6 +86,28 @@ def _normalize_recording_url(url: str) -> str:
     return url if url.endswith(".mp3") else url + ".mp3"
 
 
+def _normalize_e164(raw) -> str:
+    """Coerce a Telnyx-delivered or DB-stored phone number to ``+<digits>``.
+
+    Returns "" when the input is empty, a SIP-credential string (e.g.
+    ``gencredAbc123``), or otherwise not a pure E.164 candidate. The check
+    below the call site uses an empty result to skip the leg — never silently
+    drop a bare-digit PSTN number just because Telnyx omitted the "+".
+    """
+    if raw is None:
+        return ""
+    s = str(raw).strip()
+    if not s:
+        return ""
+    # Strip any leading "+" so we can validate the body as digits-only.
+    body = s[1:] if s.startswith("+") else s
+    if not body.isdigit():
+        return ""  # Contains letters (SIP-cred) or punctuation — not E.164.
+    if not (7 <= len(body) <= 15):
+        return ""  # E.164 spec: 7–15 digits inclusive.
+    return f"+{body}"
+
+
 # ---------------------------------------------------------------------------
 # Multi-tenant user resolution
 # ---------------------------------------------------------------------------
@@ -427,6 +449,15 @@ async def _handle_outbound_call_v2(db: Session, raw_body: bytes) -> Response:
         log.info("outbound-call v2: no call_control_id, ignoring event=%s", event_type)
         return Response(status_code=204)
 
+    # Full payload dump on call.initiated only — gives us one-line visibility
+    # into exactly what Telnyx delivered for from/to/codec/SDP metadata so we
+    # can spot E.164 normalization issues or SIP-credential leg confusion
+    # without redeploying. Other event types stay terse to avoid log spam.
+    if event_type == "call.initiated":
+        log.info(
+            "outbound-call v2 call.initiated full payload: %s",
+            json.dumps(payload, default=str)[:2000],
+        )
     log.info(
         "outbound-call v2: event=%s call_control_id=%s from=%r to=%r",
         event_type, call_control_id, payload.get("from"), payload.get("to"),
@@ -442,14 +473,19 @@ async def _handle_outbound_call_v2(db: Session, raw_body: bytes) -> Response:
 
 
 async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str) -> Response:
-    from_field = (payload.get("from") or "").strip()
-    to_field = (payload.get("to") or "").strip()
+    from_field = _normalize_e164(payload.get("from"))
+    to_field = _normalize_e164(payload.get("to"))
 
     # Filter: only handle PSTN-bound calls. SIP-credential targets (e.g.
     # 'gencredAbc...') are the secondary leg of an inbound call and are
     # already handled by the TeXML inbound flow — leave them alone.
-    if not to_field.startswith("+"):
-        log.info("v2: skipping non-PSTN call.initiated (to=%r)", to_field)
+    # NOTE: _normalize_e164 returns "" for SIP-credential strings (anything
+    # that isn't all-digits after stripping a leading "+"), so the leg-filter
+    # below also correctly excludes those. Bare-digit destinations from Telnyx
+    # like "923001234567" get the "+" prefix applied here instead of being
+    # silently 204'd as they were before.
+    if not to_field:
+        log.info("v2: skipping non-PSTN call.initiated (to=%r)", payload.get("to"))
         return Response(status_code=204)
 
     user = _resolve_user_by_caller(from_field, db)
@@ -458,9 +494,17 @@ async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str)
         call_hangup(call_control_id)
         return Response(status_code=204)
 
-    caller_id = user.phone_number
+    # caller_id goes straight into call_transfer as the from_number for the
+    # PSTN leg. Telnyx requires +E.164 there — if the DB row was created from
+    # a code path that stripped the "+" (older admin UI, manual SQL), the
+    # transfer will 422 and the call will silently hangup in the except block.
+    # Normalize defensively here.
+    caller_id = _normalize_e164(user.phone_number)
     if not caller_id:
-        log.warning("v2 outbound rejected: user %s has no phone number", user.id)
+        log.warning(
+            "v2 outbound rejected: user %s has no/invalid phone number (raw=%r)",
+            user.id, user.phone_number,
+        )
         call_hangup(call_control_id)
         return Response(status_code=204)
 
