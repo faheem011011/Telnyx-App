@@ -447,14 +447,16 @@ async def _handle_outbound_call_v2(db: Session, raw_body: bytes) -> Response:
         log.info("outbound-call v2: no call_control_id, ignoring event=%s", event_type)
         return Response(status_code=204)
 
-    # Full payload dump on call.initiated only — gives us one-line visibility
-    # into exactly what Telnyx delivered for from/to/codec/SDP metadata so we
-    # can spot E.164 normalization issues or SIP-credential leg confusion
-    # without redeploying. Other event types stay terse to avoid log spam.
-    if event_type == "call.initiated":
+    # Full payload dump for the three event types we care about — gives us
+    # the hangup_cause / hangup_source / codec / SDP metadata Telnyx delivered
+    # without having to re-derive it from a truncated body_first_500 log.
+    # Especially useful for diagnosing PSTN-side rejections (STIR/SHAKEN,
+    # carrier spam filtering) where the SIP leg between SDK and Telnyx is
+    # healthy but the auto-bridged PSTN leg dies quickly.
+    if event_type in ("call.initiated", "call.answered", "call.hangup"):
         log.info(
-            "outbound-call v2 call.initiated full payload: %s",
-            json.dumps(payload, default=str)[:2000],
+            "outbound-call v2 %s full payload: %s",
+            event_type, json.dumps(payload, default=str)[:2000],
         )
     log.info(
         "outbound-call v2: event=%s call_control_id=%s from=%r to=%r",
