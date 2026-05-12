@@ -50,9 +50,7 @@ from app.services.telnyx_service import (
     build_incoming_texml,
     build_outgoing_texml,
     build_voicemail_texml,
-    call_answer,
     call_hangup,
-    call_transfer,
 )
 
 log = logging.getLogger(__name__)
@@ -473,17 +471,42 @@ async def _handle_outbound_call_v2(db: Session, raw_body: bytes) -> Response:
 
 
 async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str) -> Response:
+    """Persist a Call row for the SIP leg of an outbound WebRTC dial.
+
+    IMPORTANT — do NOT issue ``answer`` + ``transfer`` here.
+
+    Telnyx Credential Connections auto-bridge SDK SIP INVITEs to PSTN the
+    moment the INVITE arrives with a PSTN-shaped To header. Two
+    ``call.initiated`` events fire per outbound call:
+
+      * The SIP leg from the WebRTC SDK (``calling_party_type=sip``, has
+        ``X-RTC-CALLID`` custom_headers, ``from_sip_uri`` set).
+      * The auto-created PSTN leg (no ``calling_party_type``, no SDK
+        headers, same ``call_session_id`` as the SIP leg).
+
+    We persist a Call row only for the SIP leg and let Telnyx handle the
+    bridge. Calling ``answer`` + ``transfer`` on top of the auto-bridge —
+    which the previous version of this handler did — tears down Telnyx's
+    bridge mid-setup and produces the "destination phone rings for ~1s
+    then disconnects, logged as a missed call" symptom.
+    """
+    calling_party_type = (payload.get("calling_party_type") or "").lower()
+
+    # Skip the auto-bridged PSTN leg entirely. Same session, but it's
+    # Telnyx's internal bridge plumbing — we don't own it.
+    if calling_party_type != "sip":
+        log.info(
+            "v2: skipping non-SIP call.initiated (calling_party_type=%r, state=%r)",
+            calling_party_type, payload.get("state"),
+        )
+        return Response(status_code=204)
+
     from_field = _normalize_e164(payload.get("from"))
     to_field = _normalize_e164(payload.get("to"))
 
-    # Filter: only handle PSTN-bound calls. SIP-credential targets (e.g.
-    # 'gencredAbc...') are the secondary leg of an inbound call and are
-    # already handled by the TeXML inbound flow — leave them alone.
-    # NOTE: _normalize_e164 returns "" for SIP-credential strings (anything
-    # that isn't all-digits after stripping a leading "+"), so the leg-filter
-    # below also correctly excludes those. Bare-digit destinations from Telnyx
-    # like "923001234567" get the "+" prefix applied here instead of being
-    # silently 204'd as they were before.
+    # SIP-credential targets (e.g. 'gencredAbc...') return "" from
+    # _normalize_e164 — those are the secondary leg of an inbound call and
+    # are handled by the TeXML inbound flow, not this path.
     if not to_field:
         log.info("v2: skipping non-PSTN call.initiated (to=%r)", payload.get("to"))
         return Response(status_code=204)
@@ -494,11 +517,6 @@ async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str)
         call_hangup(call_control_id)
         return Response(status_code=204)
 
-    # caller_id goes straight into call_transfer as the from_number for the
-    # PSTN leg. Telnyx requires +E.164 there — if the DB row was created from
-    # a code path that stripped the "+" (older admin UI, manual SQL), the
-    # transfer will 422 and the call will silently hangup in the except block.
-    # Normalize defensively here.
     caller_id = _normalize_e164(user.phone_number)
     if not caller_id:
         log.warning(
@@ -508,8 +526,6 @@ async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str)
         call_hangup(call_control_id)
         return Response(status_code=204)
 
-    # Persist the Call row before issuing actions, so even if Telnyx replies
-    # late we have a record. Use IntegrityError tolerance for retries.
     try:
         call = Call(
             owner_id=user.id,
@@ -523,31 +539,16 @@ async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str)
         )
         db.add(call)
         db.commit()
-        log.info("v2 outbound Call created: id=%s SID=%s user=%s to=%s",
-                 call.id, call_control_id, user.id, to_field)
+        log.info(
+            "v2 outbound Call persisted (auto-bridge): id=%s SID=%s user=%s to=%s",
+            call.id, call_control_id, user.id, to_field,
+        )
     except IntegrityError:
         db.rollback()
         log.info("v2 outbound: Call row already exists for SID=%s (retry)", call_control_id)
     except Exception:
         db.rollback()
         log.exception("v2 outbound: failed to persist Call SID=%s", call_control_id)
-
-    # Answer the inbound SIP leg, then transfer to PSTN destination. Telnyx
-    # auto-bridges the two legs once the PSTN side picks up.
-    try:
-        call_answer(call_control_id)
-    except Exception:
-        log.exception("v2 outbound: answer failed for %s", call_control_id)
-        call_hangup(call_control_id)
-        return Response(status_code=204)
-
-    try:
-        call_transfer(call_control_id, to_number=to_field, from_number=caller_id)
-        log.info("v2 outbound: transfer issued SIP_leg=%s to=%s caller_id=%s",
-                 call_control_id, to_field, caller_id)
-    except Exception:
-        log.exception("v2 outbound: transfer failed for %s", call_control_id)
-        call_hangup(call_control_id)
 
     return Response(status_code=204)
 
