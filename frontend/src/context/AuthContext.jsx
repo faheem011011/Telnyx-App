@@ -89,8 +89,22 @@ export function AuthProvider({ children }) {
     window.location.href = '/login';
   };
 
+  // Re-fetch /api/auth/me so the local user object reflects an update made
+  // elsewhere (e.g. admin Settings page edited own department or assigned
+  // themselves a phone number). Without this, the in-memory user.department /
+  // user.phone_number stay stale until the next heartbeat.
+  const refreshUser = async () => {
+    try {
+      const updated = await authApi.me();
+      setUser(updated);
+      return updated;
+    } catch {
+      return null;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

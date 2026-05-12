@@ -3,6 +3,7 @@ import {
   Users, Phone, Plus, Search, Trash2, Edit2, X, Check,
   RefreshCw, UserCheck, PhoneCall, Shield, UserCircle,
   Building2, ChevronDown, Loader2, AlertCircle, MailCheck,
+  Eye, EyeOff,
 } from 'lucide-react';
 import { adminApi } from '../services/api';
 import Avatar from '../components/Avatar';
@@ -96,9 +97,41 @@ function FormField({ label, optional, children }) {
   );
 }
 
+// Password input with show/hide toggle. Visible-state is owned by the caller
+// so the same toggle can drive both the create and edit fields without
+// double-tracking state inside this component.
+function PasswordInputWithToggle({ id, required, placeholder, value, onChange, visible, onToggleVisible }) {
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        required={required}
+        type={visible ? 'text' : 'password'}
+        minLength={MIN_PASSWORD_LENGTH}
+        className="input pr-10"
+        placeholder={placeholder}
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={onToggleVisible}
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        title={visible ? 'Hide password' : 'Show password'}
+        className="absolute inset-y-0 right-2 flex items-center text-faint hover:text-foreground transition-colors"
+        tabIndex={-1}
+      >
+        {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+}
+
 // ─── UserForm — defined at module level to avoid focus-loss on every render ───
 
 function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmit, submitLabel, isEdit = false }) {
+  const [showPassword, setShowPassword] = useState(false);
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <FormField label="Full Name">
@@ -128,16 +161,14 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
       )}
       {!isEdit && (
         <FormField label="Password">
-          <input
+          <PasswordInputWithToggle
             id="uf-password"
             required
-            type="password"
-            minLength={MIN_PASSWORD_LENGTH}
-            className="input"
             placeholder={`Create a password (min. ${MIN_PASSWORD_LENGTH} characters)`}
-            autoComplete="new-password"
             value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            onChange={(v) => setForm((f) => ({ ...f, password: v }))}
+            visible={showPassword}
+            onToggleVisible={() => setShowPassword((v) => !v)}
           />
           {form.password.length > 0 && form.password.length < MIN_PASSWORD_LENGTH && (
             <p className="mt-1 text-xs text-amber-500">
@@ -148,15 +179,13 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
       )}
       {isEdit && (
         <FormField label="New Password" optional>
-          <input
+          <PasswordInputWithToggle
             id="uf-new-password"
-            type="password"
-            minLength={MIN_PASSWORD_LENGTH}
-            className="input"
             placeholder="Leave blank to keep current password"
-            autoComplete="new-password"
             value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            onChange={(v) => setForm((f) => ({ ...f, password: v }))}
+            visible={showPassword}
+            onToggleVisible={() => setShowPassword((v) => !v)}
           />
           {form.password.length > 0 && form.password.length < MIN_PASSWORD_LENGTH && (
             <p className="mt-1 text-xs text-amber-500">

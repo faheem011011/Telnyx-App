@@ -907,9 +907,17 @@ export default function DashboardPage() {
                   fontWeight: filterDept ? 700 : 400,
                 }}
               >
-                <option value="">All Departments</option>
+                {/*
+                  The `<select>` itself renders on the blue gradient header so its
+                  selected text is white. When the menu is open the browser pops
+                  the options on a white system surface — white text would be
+                  invisible. Style each <option> with the brand blue
+                  (#07438C, the start stop of the gradient) so the menu list
+                  reads as gradient-blue while open, then snaps back to white
+                  once an item is picked because the parent `<select>` color wins. */}
+                <option value="" style={{ color: '#07438C', background: '#fff' }}>All Departments</option>
                 {DEPARTMENTS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d} value={d} style={{ color: '#07438C', background: '#fff' }}>{d}</option>
                 ))}
               </select>
               <span className="px-2 text-[9px] font-black uppercase tracking-widest select-none" style={{ color: 'rgba(255,255,255,0.6)' }}>User</span>
@@ -927,14 +935,14 @@ export default function DashboardPage() {
                 }}
                 title={!filterDept ? 'Select a department first' : undefined}
               >
-                <option value="">
+                <option value="" style={{ color: '#07438C', background: '#fff' }}>
                   {filterDept ? `All in ${filterDept}` : 'Select dept first'}
                 </option>
                 {filterDept &&
                   allUsers
                     .filter((u) => u.department === filterDept)
                     .map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
+                      <option key={u.id} value={u.id} style={{ color: '#07438C', background: '#fff' }}>{u.name}</option>
                     ))}
               </select>
             </div>
