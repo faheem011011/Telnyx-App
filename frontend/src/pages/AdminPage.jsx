@@ -10,6 +10,29 @@ import { formatPhone } from '../utils/format';
 
 const DEPARTMENTS = ['', 'Data Team', 'HR Team', 'BD Team', 'AI/ML Team', 'DevOps Team'];
 const ROLES = ['user', 'admin'];
+// Must match backend UserAdminCreate.password Field min_length — keep in sync.
+const MIN_PASSWORD_LENGTH = 12;
+
+// FastAPI returns 422 validation errors as an array of {type, loc, msg, input, ctx}
+// objects. Rendering that array directly as React children throws error #31
+// ("Objects are not valid as a React child"), which bubbles to ErrorBoundary
+// and shows the generic "Something went wrong" page — burying the actual
+// validation message that would have told the admin what to fix.
+function formatApiError(err, fallback) {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => {
+        if (typeof d === 'string') return d;
+        const field = Array.isArray(d?.loc) ? d.loc.filter((p) => p !== 'body').join('.') : '';
+        const msg = d?.msg || 'invalid value';
+        return field ? `${field}: ${msg}` : msg;
+      })
+      .join('; ');
+  }
+  return fallback;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -109,15 +132,17 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
             id="uf-password"
             required
             type="password"
-            minLength={6}
+            minLength={MIN_PASSWORD_LENGTH}
             className="input"
-            placeholder="Create a password (min. 6 characters)"
+            placeholder={`Create a password (min. ${MIN_PASSWORD_LENGTH} characters)`}
             autoComplete="new-password"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
           />
-          {form.password.length > 0 && form.password.length < 6 && (
-            <p className="mt-1 text-xs text-amber-500">Password must be at least 6 characters.</p>
+          {form.password.length > 0 && form.password.length < MIN_PASSWORD_LENGTH && (
+            <p className="mt-1 text-xs text-amber-500">
+              Password must be at least {MIN_PASSWORD_LENGTH} characters.
+            </p>
           )}
         </FormField>
       )}
@@ -126,17 +151,19 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
           <input
             id="uf-new-password"
             type="password"
-            minLength={6}
+            minLength={MIN_PASSWORD_LENGTH}
             className="input"
             placeholder="Leave blank to keep current password"
             autoComplete="new-password"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
           />
-          {form.password.length > 0 && form.password.length < 6 && (
-            <p className="mt-1 text-xs text-amber-500">Password must be at least 6 characters.</p>
+          {form.password.length > 0 && form.password.length < MIN_PASSWORD_LENGTH && (
+            <p className="mt-1 text-xs text-amber-500">
+              Password must be at least {MIN_PASSWORD_LENGTH} characters.
+            </p>
           )}
-          {form.password.length >= 6 && (
+          {form.password.length >= MIN_PASSWORD_LENGTH && (
             <p className="mt-1 text-xs text-green-500">New password will be set on save.</p>
           )}
         </FormField>
@@ -227,8 +254,8 @@ function UsersTab({ users, loading, onRefresh }) {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!form.password || form.password.length < 6) {
-      setActionError('Password is required and must be at least 6 characters.');
+    if (!form.password || form.password.length < MIN_PASSWORD_LENGTH) {
+      setActionError(`Password is required and must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
     if (!form.department) {
@@ -251,7 +278,7 @@ function UsersTab({ users, loading, onRefresh }) {
       setTimeout(() => setSuccessBanner(null), 6000);
       onRefresh();
     } catch (err) {
-      setActionError(err.response?.data?.detail || 'Failed to create user');
+      setActionError(formatApiError(err, 'Failed to create user'));
     } finally {
       setActionLoading(false);
     }
@@ -259,8 +286,8 @@ function UsersTab({ users, loading, onRefresh }) {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    if (form.password && form.password.length < 6) {
-      setActionError('New password must be at least 6 characters.');
+    if (form.password && form.password.length < MIN_PASSWORD_LENGTH) {
+      setActionError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
     setActionLoading(true);
@@ -277,7 +304,7 @@ function UsersTab({ users, loading, onRefresh }) {
       setEditUser(null);
       onRefresh();
     } catch (err) {
-      setActionError(err.response?.data?.detail || 'Failed to update user');
+      setActionError(formatApiError(err, 'Failed to update user'));
     } finally {
       setActionLoading(false);
     }
