@@ -445,7 +445,7 @@ function TopAreaCodesCards({ data, colors }) {
                 <span>·</span>
                 <span style={{ color: BRAND + 'bb' }}>{Math.round((item.outbound / (item.count || 1)) * 100)}% out</span>
                 <span>·</span>
-                <span>{item.unique_numbers} unique #s</span>
+                <span>{item.unique_numbers} unique numbers</span>
               </div>
 
               <div className="h-1.5 rounded-full overflow-hidden"
@@ -501,7 +501,7 @@ function TopAreaCodesCards({ data, colors }) {
           <span className="w-2 h-2 rounded-full" style={{ background: BRAND + '70' }} />
           Outgoing
         </div>
-        <span className="text-[10px] opacity-35 ml-auto">bar width = relative call volume</span>
+        <span className="text-[10px] opacity-35 ml-auto"></span> 
       </div>
     </div>
   );
@@ -808,7 +808,7 @@ export default function DashboardPage() {
                 Analytics
               </h1>
             </div>
-            <p className="text-sm opacity-40 ml-11">Real-time insights · AlphaCall</p>
+            <p className="text-sm opacity-40 ml-11">Real-time insights</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -994,7 +994,7 @@ export default function DashboardPage() {
         {!error && (
           <>
             {/* ── Period KPI Grid ───────────────────────────────────────── */}
-            <SectionHeading label="Period Summary" color={BRAND} />
+            <SectionHeading label="Summary" color={BRAND} />
             <div className="space-y-3 mb-10">
               {loading ? (
                 <>
@@ -1044,7 +1044,7 @@ export default function DashboardPage() {
 
                   <LazySection fallback={<SkeletonChart />}>
                     <ChartCard title="Calls by Hour of Day"
-                      subtitle="24-hour call distribution — incoming, outgoing, missed & declined"
+                      subtitle="24-hour call distribution"
                       accentColor={BRAND} colors={colors}>
                       <HourlyChart data={data?.calls_by_hour} colors={colors} />
                     </ChartCard>
@@ -1052,7 +1052,7 @@ export default function DashboardPage() {
 
                   <LazySection fallback={<SkeletonChart />}>
                     <ChartCard title="Calls by Day of Week"
-                      subtitle="Which days drive the most call volume"
+                      subtitle="Days that drive the most call volume"
                       accentColor={BRAND} colors={colors}>
                       <DowChart data={data?.calls_by_day_of_week} colors={colors} />
                     </ChartCard>
@@ -1060,7 +1060,7 @@ export default function DashboardPage() {
 
                   <LazySection fallback={<SkeletonChart />}>
                     <ChartCard title="Top Locations by Area Code"
-                      subtitle="Top 3 calling areas — city, state, inbound vs outbound split"
+                      subtitle="Top 3 calling areas (city, state, inbound vs outbound split)"
                       accentColor={BRAND} colors={colors}>
                       <TopAreaCodesCards data={data?.top_area_codes} colors={colors} />
                     </ChartCard>
@@ -1089,7 +1089,7 @@ export default function DashboardPage() {
                       style={{ borderColor: colors.isDark ? '#27272a' : '#f4f4f5' }}>
                       <div>
                         <h3 className="font-bold text-sm">Recent Messages</h3>
-                        <p className="text-xs opacity-40 mt-0.5">Latest 20 · read and unread</p>
+                        <p className="text-xs opacity-40 mt-0.5">Read and Unread</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1.5 text-xs opacity-50">

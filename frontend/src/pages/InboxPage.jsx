@@ -120,7 +120,7 @@ export default function InboxPage() {
                   type="search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by phone number or contact…"
+                  placeholder="Search by contact"
                   className="input pl-9 w-64 py-2"
                 />
               </div>

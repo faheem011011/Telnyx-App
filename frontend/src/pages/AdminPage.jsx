@@ -547,7 +547,7 @@ function UsersTab({ users, loading, onRefresh }) {
       )}
 
       {editUser && (
-        <Modal title={`Edit — ${editUser.name}`} onClose={cancelForm}>
+        <Modal title={`Edit - ${editUser.name}`} onClose={cancelForm}>
           <UserForm
             form={form}
             setForm={setForm}
@@ -683,7 +683,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
         style={{ borderColor: 'rgb(var(--border-primary))', background: 'rgb(var(--bg-secondary))' }}
       >
         <h3 className="font-display font-semibold text-sm mb-1">Search & Purchase Numbers</h3>
-        <p className="text-xs text-muted mb-4">Search Telnyx's available US numbers by area code and purchase directly.</p>
+        <p className="text-xs text-muted mb-4">Search Telnyx's available US numbers and purchase directly</p>
 
         <div className="flex gap-3 mb-4">
           <div className="relative flex-1">
