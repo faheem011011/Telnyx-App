@@ -46,6 +46,27 @@ class ResetPasswordRequest(BaseModel):
     )
 
 
+class ChangePasswordRequest(BaseModel):
+    """Authenticated self-service password change.
+
+    Requires the caller's current password as a confirmation; on success the
+    user's token_version is bumped so any other open sessions are invalidated.
+    """
+    old_password: str
+    new_password: str = Field(
+        ...,
+        min_length=12,
+        max_length=72,
+        description="New password (12-72 characters)",
+    )
+
+
+class UpdateMeRequest(BaseModel):
+    """Self-service profile patch. Only the user's own display name is
+    editable here — role, email, phone, and department changes must go
+    through the admin endpoints so they can be audited."""
+    name: str = Field(..., min_length=1, max_length=255)
+
 
 class TokenResponse(BaseModel):
     access_token: str

@@ -78,8 +78,8 @@ export default function ContactsPage() {
         <div>
           <h1 className="text-xl font-display font-bold">Contacts</h1>
           <p className="text-sm text-muted mt-0.5">
-            {contacts.length} total
-            {isAdmin && ' · all users'}
+            {isAdmin && ' All users '}
+            ({contacts.length} total)
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -89,7 +89,7 @@ export default function ContactsPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or phone number…"
+              placeholder="Search by name or phone"
               className="input pl-9 w-64 py-2"
             />
           </div>
@@ -250,69 +250,77 @@ function ContactFormModal({ contact, onClose, onSaved }) {
       style={{ background: 'rgb(0 0 0 / 0.6)' }}
       onClick={onClose}
     >
+      {/* Compacted: smaller padding, denser grid (name+phone, email+company
+          side-by-side on >=sm), a 2-row notes textarea, and a max-h with
+          overflow-y so the modal always fits the viewport — never pushes
+          off-screen on shorter laptop displays. */}
       <div
-        className="w-full max-w-md mx-4 rounded-2xl p-6 animate-slide-up"
+        className="w-full max-w-lg mx-4 rounded-2xl p-4 sm:p-5 animate-slide-up max-h-[92vh] overflow-y-auto"
         style={{
           background: 'rgb(var(--bg-primary))',
           border: '1px solid rgb(var(--border-primary))',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-display font-bold">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-display font-bold">
             {isNew ? 'New contact' : 'Edit contact'}
           </h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full surface-tertiary flex items-center justify-center hover:opacity-80"
+            className="w-7 h-7 rounded-full surface-tertiary flex items-center justify-center hover:opacity-80"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <Field label="Name" required>
-            <input
-              autoFocus
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Enter contact name"
-              className="input"
-            />
-          </Field>
-          <Field label="Phone number" required>
-            <input
-              required
-              value={form.phone_number}
-              onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
-              placeholder="Enter phone number (e.g. +1 555 000 1234)"
-              className="input"
-            />
-          </Field>
-          <Field label="Email">
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="Enter email address"
-              className="input"
-            />
-          </Field>
-          <Field label="Company">
-            <input
-              value={form.company}
-              onChange={(e) => setForm({ ...form, company: e.target.value })}
-              placeholder="Enter company name"
-              className="input"
-            />
-          </Field>
+        <form onSubmit={handleSubmit} className="space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <Field label="Name" required>
+              <input
+                autoFocus
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Contact name"
+                className="input"
+              />
+            </Field>
+            <Field label="Phone number" required>
+              <input
+                required
+                value={form.phone_number}
+                onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
+                placeholder="+1 555 000 1234"
+                className="input"
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <Field label="Email">
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="name@example.com"
+                className="input"
+              />
+            </Field>
+            <Field label="Company">
+              <input
+                value={form.company}
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+                placeholder="Company name"
+                className="input"
+              />
+            </Field>
+          </div>
           <Field label="Notes">
             <textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Add any notes about this contact…"
-              rows={3}
+              placeholder="Any notes about this contact…"
+              rows={2}
               className="input resize-none"
             />
           </Field>
@@ -328,16 +336,16 @@ function ContactFormModal({ contact, onClose, onSaved }) {
           </label>
 
           {error && (
-            <div className="px-3 py-2 rounded-lg text-sm bg-red-500/10 text-red-500 border border-red-500/20">
+            <div className="px-3 py-2 rounded-lg text-xs bg-red-500/10 text-red-500 border border-red-500/20">
               {error}
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-ghost surface-tertiary flex-1 py-2.5 text-sm">
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-ghost surface-tertiary flex-1 py-2 text-sm">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1 py-2.5 text-sm disabled:opacity-60">
+            <button type="submit" disabled={saving} className="btn-primary flex-1 py-2 text-sm disabled:opacity-60">
               {saving ? 'Saving…' : isNew ? 'Create contact' : 'Save changes'}
             </button>
           </div>
@@ -350,10 +358,10 @@ function ContactFormModal({ contact, onClose, onSaved }) {
 function Field({ label, required, children }) {
   return (
     <div>
-      <label className="text-xs font-medium text-muted uppercase tracking-wide">
+      <label className="text-[11px] font-medium text-muted uppercase tracking-wide">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
-      <div className="mt-1.5">{children}</div>
+      <div className="mt-1">{children}</div>
     </div>
   );
 }

@@ -36,6 +36,12 @@ export const authApi = {
   login: (email, password) =>
     api.post('/api/auth/login', { email, password }).then((r) => r.data),
   me: () => api.get('/api/auth/me').then((r) => r.data),
+  // Self-service profile patch (display name only — email/role/etc. go via admin).
+  updateMe: (data) => api.patch('/api/auth/me', data).then((r) => r.data),
+  // Authenticated self-service password change. Returns 204; the caller's JWT
+  // is invalidated server-side so the UI should send the user to /login next.
+  changePassword: (old_password, new_password) =>
+    api.post('/api/auth/change-password', { old_password, new_password }).then((r) => r.data),
   logout: () => api.post('/api/auth/logout').catch(() => {}),
   forgotPassword: (email) =>
     api.post('/api/auth/forgot-password', { email }).then((r) => r.data),

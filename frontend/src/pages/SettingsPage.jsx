@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Phone, Mail, User as UserIcon, ExternalLink, Loader2, Check, AlertCircle } from 'lucide-react';
+import {
+  Phone, Mail, User as UserIcon, ExternalLink, Loader2, Check, AlertCircle,
+  Eye, EyeOff, KeyRound,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTelnyx as useTwilio } from '../context/TelnyxContext';
-import { adminApi } from '../services/api';
+import { adminApi, authApi } from '../services/api';
 import { formatPhone } from '../utils/format';
 
 const DEPARTMENTS = ['Data Team', 'HR Team', 'BD Team', 'AI/ML Team', 'DevOps Team'];
+// Must match backend ChangePasswordRequest.new_password Field min_length.
+const MIN_PASSWORD_LENGTH = 12;
 
 export default function SettingsPage() {
   const { user, logout, refreshUser } = useAuth();
@@ -17,17 +22,20 @@ export default function SettingsPage() {
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
         <header>
           <h1 className="text-2xl font-display font-bold">Settings</h1>
-          <p className="text-sm text-muted mt-1">Manage your profile and app preferences.</p>
+          <p className="text-sm text-muted mt-1">Manage your profile</p>
         </header>
 
-        {/* Profile */}
+        {/* Profile — name is editable inline; email & phone stay read-only */}
         <Section title="Profile">
-          <Field label="Name" icon={UserIcon}>{user?.name}</Field>
+          <NameField user={user} onSaved={refreshUser} />
           <Field label="Email" icon={Mail}>{user?.email}</Field>
           <Field label="Phone number" icon={Phone}>
             {user?.phone_number ? formatPhone(user.phone_number) : 'Not configured'}
           </Field>
         </Section>
+
+        {/* Change password — available to every authenticated user */}
+        <ChangePasswordSection onChanged={logout} />
 
         {/* Admin self-management — change own team, assign own number */}
         {isAdmin && (
@@ -276,6 +284,234 @@ function SelfNumberEditor({ user, onSaved }) {
         )}
       </div>
     </Section>
+  );
+}
+
+// ─── Inline editable name field, available to every authenticated user ──────
+function NameField({ user, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(user?.name || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => { setValue(user?.name || ''); }, [user?.name]);
+
+  const cancel = () => { setEditing(false); setValue(user?.name || ''); setError(null); };
+
+  const save = async () => {
+    const trimmed = value.trim();
+    if (!trimmed) { setError('Name cannot be empty.'); return; }
+    if (trimmed === user?.name) { setEditing(false); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      await authApi.updateMe({ name: trimmed });
+      await onSaved?.();
+      setEditing(false);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update name.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="px-4 py-3.5 flex items-center gap-3 border-b last:border-b-0"
+      style={{ borderColor: 'rgb(var(--border-primary))' }}
+    >
+      <UserIcon className="w-4 h-4 text-faint flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-muted">Name</div>
+        {editing ? (
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              autoFocus
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel(); }}
+              className="input flex-1 py-1.5 text-sm"
+              maxLength={255}
+              disabled={saving}
+            />
+            <button
+              onClick={save}
+              disabled={saving}
+              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-40"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save'}
+            </button>
+            <button
+              onClick={cancel}
+              disabled={saving}
+              className="px-3 py-1.5 text-xs text-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium mt-0.5 truncate">{user?.name || '—'}</div>
+            <button
+              onClick={() => setEditing(true)}
+              className="text-xs text-brand-600 hover:underline ml-2"
+            >
+              Edit
+            </button>
+          </div>
+        )}
+        {error && (
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-red-500">
+            <AlertCircle className="w-3.5 h-3.5" /> {error}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Change-password section, available to every authenticated user ─────────
+function ChangePasswordSection({ onChanged }) {
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!oldPwd) { setError('Enter your current password.'); return; }
+    if (newPwd.length < MIN_PASSWORD_LENGTH) {
+      setError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setError('New password and confirmation do not match.');
+      return;
+    }
+    if (newPwd === oldPwd) {
+      setError('New password must be different from current password.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await authApi.changePassword(oldPwd, newPwd);
+      setDone(true);
+      // The backend bumped token_version — every JWT for this user is now
+      // invalid. Sign the user out so the next request doesn't 401.
+      setTimeout(() => onChanged?.(), 1200);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not change password.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <Section title="Change password">
+        <div className="p-4 flex items-center gap-2 text-sm text-emerald-500">
+          <Check className="w-4 h-4" /> Password updated. Signing you out…
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Change password">
+      <form onSubmit={submit} className="p-4 space-y-3">
+        <PasswordEyeInput
+          id="cp-old"
+          label="Current password"
+          value={oldPwd}
+          onChange={setOldPwd}
+          visible={showOld}
+          onToggleVisible={() => setShowOld((v) => !v)}
+          autoComplete="current-password"
+          disabled={busy}
+        />
+        <PasswordEyeInput
+          id="cp-new"
+          label="New password"
+          value={newPwd}
+          onChange={setNewPwd}
+          visible={showNew}
+          onToggleVisible={() => setShowNew((v) => !v)}
+          autoComplete="new-password"
+          minLength={MIN_PASSWORD_LENGTH}
+          hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+          disabled={busy}
+        />
+        <PasswordEyeInput
+          id="cp-confirm"
+          label="Confirm new password"
+          value={confirmPwd}
+          onChange={setConfirmPwd}
+          visible={showConfirm}
+          onToggleVisible={() => setShowConfirm((v) => !v)}
+          autoComplete="new-password"
+          disabled={busy}
+        />
+        {error && (
+          <div className="flex items-center gap-2 text-xs text-red-500">
+            <AlertCircle className="w-3.5 h-3.5" /> {error}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-xs text-muted">
+            Changing your password will sign you out from all sessions.
+          </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className="btn-primary px-4 py-2 text-sm disabled:opacity-40 flex items-center gap-2"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+            {busy ? 'Updating…' : 'Update password'}
+          </button>
+        </div>
+      </form>
+    </Section>
+  );
+}
+
+// Generic password input with a clickable eye / eye-off toggle on the right.
+function PasswordEyeInput({
+  id, label, value, onChange, visible, onToggleVisible,
+  autoComplete, minLength, hint, disabled,
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-xs text-muted mb-1">{label}</label>
+      <div className="relative">
+        <input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          minLength={minLength}
+          disabled={disabled}
+          className="input w-full pr-10"
+        />
+        <button
+          type="button"
+          onClick={onToggleVisible}
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          title={visible ? 'Hide password' : 'Show password'}
+          tabIndex={-1}
+          className="absolute inset-y-0 right-2 flex items-center text-faint hover:text-foreground transition-colors"
+        >
+          {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+      {hint && <div className="mt-1 text-[11px] text-muted">{hint}</div>}
+    </div>
   );
 }
 
