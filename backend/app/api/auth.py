@@ -67,13 +67,10 @@ def login(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(current_user: User = Depends(get_current_user)) -> None:
-    """Client-side logout signal — JWTs are stateless and cannot be revoked
-    server-side without a token-version bump (see ``bump_token_version``).
-    The client MUST discard its token on receipt of 204.
-    For forced server-side revocation (admin password reset, etc.), call
-    ``bump_token_version`` and commit; outstanding tokens become invalid.
-    """
+def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> None:
+    """Bump token_version so the JWT is invalid on the next request."""
+    bump_token_version(current_user)
+    db.commit()
 
 
 @router.get("/me", response_model=UserOut)
