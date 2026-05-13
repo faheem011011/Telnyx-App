@@ -4,9 +4,11 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -14,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api import analytics, auth, calls, contacts, messages, telnyx_webhooks
 from app.api import admin
 from app.config import settings
-from app.database import engine
+from app.database import engine, get_db
 from app.limiter import limiter
 
 
@@ -125,8 +127,15 @@ def root():
 
 
 @app.get("/api/health")
-def health():
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        log.exception("Health check: database unreachable")
+        db_status = "down"
     return {
-        "status": "ok",
+        "status": "ok" if db_status == "ok" else "degraded",
+        "database": db_status,
         "telnyx_configured": bool(settings.telnyx_api_key),
     }

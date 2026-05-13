@@ -59,7 +59,7 @@ router = APIRouter(prefix="/api/telnyx", tags=["telnyx-webhooks"])
 
 
 # Reject events whose timestamp is more than this many seconds away from now (C-01).
-_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
+_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 7200  # 2h — covers Telnyx's full retry schedule
 
 
 # ---------------------------------------------------------------------------
@@ -809,7 +809,10 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
         call = db.query(Call).filter(Call.call_sid == call_sid).first()
         if call:
             call.voicemail_url = _normalize_recording_url(recording_url)
-            call.status = "missed"
+            # Only downgrade to "missed" if the call never reached a terminal state.
+            # Without this guard a completed (answered) call would be overwritten.
+            if call.status not in ("completed", "busy", "failed", "no-answer"):
+                call.status = "missed"
             if not call.ended_at:
                 call.ended_at = _now()
             try:

@@ -196,6 +196,7 @@ class ContactOut(BaseModel):
 
     id: int
     owner_id: int
+    owner_name: str | None = None
     name: str
     phone_number: str
     email: str | None
