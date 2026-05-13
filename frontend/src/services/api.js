@@ -74,6 +74,10 @@ export const callsApi = {
   // is a 10-minute pre-signed S3 link that 403s after it expires.
   recordingUrl: (id) =>
     api.get(`/api/calls/${id}/recording-url`).then((r) => r.data),
+  // voicemail_url in the DB is a raw Telnyx API URL that requires auth headers
+  // — browsers can't load it directly, so we proxy through the backend.
+  voicemailUrl: (id) =>
+    api.get(`/api/calls/${id}/voicemail-url`).then((r) => r.data),
 };
 
 // ============================================================

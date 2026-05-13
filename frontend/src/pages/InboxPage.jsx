@@ -258,6 +258,8 @@ function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
   const displayName = call.contact?.name || formatPhone(otherNumber);
   const [recordingSrc, setRecordingSrc] = useState(null);
   const [recordingError, setRecordingError] = useState(null);
+  const [voicemailSrc, setVoicemailSrc] = useState(null);
+  const [voicemailError, setVoicemailError] = useState(null);
 
   // Fetch a fresh signed URL on demand. The recording_url stored on the call
   // row is a 10-minute pre-signed S3 link that 403s after expiry, so we hit
@@ -280,6 +282,26 @@ function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
       });
     return () => { cancelled = true; };
   }, [call.id, call.recording_url]);
+
+  // voicemail_url is a raw Telnyx API URL that requires auth — browsers can't
+  // load it directly, so we fetch a signed MP3 URL through the backend.
+  useEffect(() => {
+    setVoicemailSrc(null);
+    setVoicemailError(null);
+    if (!call.voicemail_url) return;
+    let cancelled = false;
+    callsApi.voicemailUrl(call.id)
+      .then(({ url }) => { if (!cancelled) setVoicemailSrc(url); })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err.response?.status === 404) {
+          setVoicemailError('Voicemail no longer available.');
+        } else {
+          setVoicemailError('Unable to load voicemail.');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [call.id, call.voicemail_url]);
 
   return (
     <div
@@ -339,12 +361,13 @@ function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
             <div className="text-xs uppercase tracking-wider font-semibold text-muted mb-2">
               Voicemail
             </div>
-            <audio
-              controls
-              src={call.voicemail_url}
-              className="w-full h-10"
-              onError={(e) => { e.target.src = `${call.voicemail_url}.mp3`; }}
-            />
+            {voicemailError ? (
+              <div className="text-sm text-muted">{voicemailError}</div>
+            ) : voicemailSrc ? (
+              <audio controls src={voicemailSrc} className="w-full h-10" />
+            ) : (
+              <div className="text-sm text-muted">Loading voicemail…</div>
+            )}
             {call.voicemail_transcription && (
               <div className="text-sm mt-3 p-3 rounded-lg surface-tertiary leading-relaxed">
                 {call.voicemail_transcription}

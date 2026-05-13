@@ -293,6 +293,32 @@ def stop_recording(
         )
 
 
+@router.get("/{call_id}/voicemail-url")
+def get_voicemail_url(
+    call_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mint a fresh signed download URL for a voicemail recording.
+
+    voicemail_url stored in the DB is a raw Telnyx API URL that requires an
+    Authorization header — browsers can't load it directly. We extract the
+    recording ID and re-sign via Telnyx the same way we do for call recordings.
+    """
+    call = db.query(Call).filter(
+        Call.id == call_id,
+        Call.owner_id == current_user.id,
+    ).first()
+    if not call or not call.voicemail_url:
+        raise HTTPException(status_code=404, detail="No voicemail for this call")
+
+    recording_id = call.voicemail_url.rstrip("/").split("/")[-1]
+    url = fetch_recording_url(recording_id)
+    if not url:
+        raise HTTPException(status_code=404, detail="Voicemail is no longer available from Telnyx")
+    return {"url": url}
+
+
 @router.get("/{call_id}/recording-url")
 def get_recording_url(
     call_id: int,
