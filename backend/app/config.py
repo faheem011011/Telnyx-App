@@ -1,6 +1,9 @@
 """Application configuration loaded from environment variables."""
 from functools import lru_cache
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEV_SECRET = "dev-secret-key-change-in-production"
 
 
 class Settings(BaseSettings):
@@ -14,7 +17,19 @@ class Settings(BaseSettings):
     telnyx_messaging_profile_id: str = ""  # Messaging profile for SMS
 
     # App
-    secret_key: str = "dev-secret-key-change-in-production"
+    secret_key: str = _DEV_SECRET
+
+    @model_validator(mode="after")
+    def _require_strong_secret(self) -> "Settings":
+        if self.secret_key == _DEV_SECRET:
+            raise ValueError(
+                "SECRET_KEY is still the dev default — set a strong random value "
+                "in your environment before starting the server. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        if len(self.secret_key) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters.")
+        return self
     database_url: str = ""
     frontend_url: str = "http://localhost:5173"
     public_backend_url: str = "http://localhost:8000"

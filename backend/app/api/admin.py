@@ -42,10 +42,12 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 @router.get("/users", response_model=list[UserWithNumbersOut])
 def list_users(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[UserWithNumbersOut]:
-    users = db.query(User).order_by(User.created_at.asc()).all()
+    users = db.query(User).order_by(User.created_at.asc()).offset(offset).limit(limit).all()
     return [UserWithNumbersOut.model_validate(u) for u in users]
 
 
@@ -222,6 +224,8 @@ def resend_verification(
 
 @router.get("/numbers", response_model=list[PhoneNumberOut])
 def list_numbers(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[PhoneNumberOut]:
@@ -229,6 +233,8 @@ def list_numbers(
         db.query(PhoneNumber)
         .outerjoin(User, PhoneNumber.assigned_to_user_id == User.id)
         .order_by(PhoneNumber.purchased_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [PhoneNumberOut.model_validate(n) for n in numbers]

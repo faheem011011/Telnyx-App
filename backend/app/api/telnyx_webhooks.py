@@ -996,25 +996,13 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
     # Try exact match on call_sid first.
     call = db.query(Call).filter(Call.call_sid == call_control_id).first()
 
-    # Fallback: the Telnyx Call Control v2 call_control_id and the TeXML
-    # CallSid we stored on Call.call_sid may have different formats. If exact
-    # match misses, try the most-recent unended call's owner — same logic as
-    # recording start in /api/calls/recording/start. Without this fallback the
-    # recording URL is never persisted and the Recordings tab stays empty.
     if not call:
+        # Cross-tenant fallback removed: querying without owner_id would attach
+        # User A's recording to User B's call in a multi-user deployment.
         log.warning(
-            "recording-event: no Call matched call_sid=%r; trying most-recent unended fallback",
+            "recording-event: no Call matched call_sid=%r; dropping event (multi-tenant safety)",
             call_control_id,
         )
-        call = (
-            db.query(Call)
-            .filter(Call.recording_url.is_(None))
-            .order_by(Call.started_at.desc())
-            .first()
-        )
-
-    if not call:
-        log.warning("recording-event: no Call row to attach recording_url to")
         return Response(status_code=204)
 
     call.recording_url = recording_url
