@@ -769,9 +769,14 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     if not _claim_event(db, _texml_event_id("call-status", form_data), "call-status"):
         return _xml("<Response></Response>")
 
+    _TERMINAL = {"completed", "missed", "busy", "no-answer", "failed"}
+
     call = db.query(Call).filter(Call.call_sid == call_sid).first()
     if call:
-        if call_status:
+        # Only write status when: current is not terminal, OR new value is terminal.
+        # This stops a late "ringing"/"in-progress" webhook from overwriting
+        # a "completed" status that arrived first.
+        if call_status and (call.status not in _TERMINAL or call_status in _TERMINAL):
             call.status = call_status
         # M-08: only update duration when the incoming value is greater so a
         # racing /post-dial cannot reset duration to 0 after this handler set it.

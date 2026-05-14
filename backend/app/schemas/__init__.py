@@ -1,7 +1,20 @@
 """Pydantic schemas for API input/output."""
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+
+
+def _validate_password(v: str) -> str:
+    """Enforce complexity: upper + lower + digit + special char."""
+    if not any(c.isupper() for c in v):
+        raise ValueError("Password must contain at least one uppercase letter.")
+    if not any(c.islower() for c in v):
+        raise ValueError("Password must contain at least one lowercase letter.")
+    if not any(c.isdigit() for c in v):
+        raise ValueError("Password must contain at least one digit.")
+    if not any(c in "!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in v):
+        raise ValueError("Password must contain at least one special character.")
+    return v
 
 
 # L-03: enforced via the ``Department`` Literal below.
@@ -31,6 +44,11 @@ class SetupRequest(BaseModel):
         description="Password (12-72 characters)",
     )
 
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        return _validate_password(v)
+
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -44,6 +62,11 @@ class ResetPasswordRequest(BaseModel):
         max_length=72,
         description="Password (12-72 characters)",
     )
+
+    @field_validator("new_password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        return _validate_password(v)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -59,6 +82,11 @@ class ChangePasswordRequest(BaseModel):
         max_length=72,
         description="New password (12-72 characters)",
     )
+
+    @field_validator("new_password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        return _validate_password(v)
 
 
 class UpdateMeRequest(BaseModel):
@@ -102,6 +130,11 @@ class UserAdminCreate(BaseModel):
     role: str = Field("user", pattern="^(admin|user)$")
     department: Department
 
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        return _validate_password(v)
+
 
 class UserAdminUpdate(BaseModel):
     name: str | None = None
@@ -115,6 +148,11 @@ class UserAdminUpdate(BaseModel):
         max_length=72,
         description="Password (12-72 characters)",
     )
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str | None) -> str | None:
+        return _validate_password(v) if v is not None else v
 
 
 class UserWithNumbersOut(BaseModel):

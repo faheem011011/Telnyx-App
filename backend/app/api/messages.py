@@ -169,9 +169,11 @@ def send_message(
     try:
         result = send_sms(payload.to_number, payload.body, from_num)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send SMS: {e}")
+        log.warning("SMS validation error to=%s: %s", payload.to_number, e)
+        raise HTTPException(status_code=400, detail="Invalid phone number or message.")
+    except Exception:
+        log.exception("SMS send failed to=%s", payload.to_number)
+        raise HTTPException(status_code=500, detail="SMS service temporarily unavailable.")
 
     msg = Message(
         owner_id=current_user.id,

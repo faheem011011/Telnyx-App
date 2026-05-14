@@ -132,6 +132,7 @@ export function TelnyxProvider({ children }) {
   //   tracks, so the browser keeps the "microphone in use" indicator on. We
   //   keep an explicit handle and stop the tracks ourselves on terminal state.
   const micStreamRef        = useRef(null);
+  const callTimeoutRef      = useRef(null);
 
   const [deviceReady,       setDeviceReady]       = useState(false);
   const [deviceError,       setDeviceError]       = useState(null);
@@ -189,6 +190,8 @@ export function TelnyxProvider({ children }) {
   // Helper: cleanly terminate a call that died outside normal hangup flow
   // (WebSocket drop, SDK error, etc.) and optionally show a notification.
   const _forceCleanup = useCallback((message) => {
+    clearTimeout(callTimeoutRef.current);
+    callTimeoutRef.current  = null;
     const wasConn = wasConnectedRef.current;
     const dyingCall = activeCallRef.current;
     activeCallRef.current   = null;
@@ -277,6 +280,8 @@ export function TelnyxProvider({ children }) {
 
           // ── Active (both directions) ──────────────────────────────────────
           if (state === 'active') {
+            clearTimeout(callTimeoutRef.current);
+            callTimeoutRef.current  = null;
             activeCallRef.current   = call;
             wasConnectedRef.current = true;
             if (!cancelled) {
@@ -407,6 +412,13 @@ export function TelnyxProvider({ children }) {
     activeCallRef.current   = call;
     wasConnectedRef.current = false;
     userHangupRef.current   = false;
+
+    // Auto-cancel if the call never connects within 45 seconds.
+    callTimeoutRef.current = setTimeout(() => {
+      if (activeCallRef.current && !wasConnectedRef.current) {
+        _forceCleanup('Call timed out — no answer.');
+      }
+    }, 45_000);
 
     setActiveCall(call);
     setActiveCallSdkState(null);   // SDK will drive state via notifications

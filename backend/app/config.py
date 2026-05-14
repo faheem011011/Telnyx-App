@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     resend_from_email: str = "noreply@yourdomain.com"
 
+    # Sentry — leave empty to disable error tracking
+    sentry_dsn: str = ""
+
     @property
     def resolved_database_url(self) -> str:
         """Railway provides postgres:// but SQLAlchemy requires postgresql://."""

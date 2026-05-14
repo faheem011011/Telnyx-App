@@ -13,12 +13,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+import sentry_sdk
+
 from app.api import analytics, auth, calls, contacts, messages, telnyx_webhooks
 from app.api import admin
 from app.config import settings
 from app.database import engine, get_db
 from app.limiter import limiter
 
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=0.1,
+        environment="production",
+    )
 
 logging.basicConfig(
     level=logging.INFO,
