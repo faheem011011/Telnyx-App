@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Send, Phone, ArrowLeft, MessageCircle, Search } from 'lucide-react';
 import { messagesApi } from '../services/api';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone, formatCallDate, toE164 } from '../utils/format';
 import Avatar from '../components/Avatar';
 
@@ -248,7 +248,7 @@ function ThreadView({ phoneNumber, onSent }) {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
-  const { makeCall } = useTwilio();
+  const { makeCall } = useTelnyx();
   const bottomRef = useRef(null);
 
   const load = useCallback((showSpinner = false) => {

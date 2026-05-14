@@ -10,7 +10,7 @@ engine = create_engine(
     poolclass=QueuePool,
     pool_size=5,
     max_overflow=10,
-    pool_pre_ping=False,
+    pool_pre_ping=True,
     pool_recycle=300,
 )
 

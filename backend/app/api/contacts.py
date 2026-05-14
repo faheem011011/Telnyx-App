@@ -30,6 +30,8 @@ def _resolve_contact(
 def list_contacts(
     search: str | None = Query(None),
     favorites_only: bool = Query(False),
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list:
@@ -56,7 +58,7 @@ def list_contacts(
     if favorites_only:
         query = query.filter(Contact.is_favorite.is_(True))
 
-    contacts = query.order_by(Contact.name.asc()).all()
+    contacts = query.order_by(Contact.name.asc()).offset(offset).limit(limit).all()
 
     if is_admin:
         return [

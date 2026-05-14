@@ -86,10 +86,10 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-function FormField({ label, optional, children }) {
+function FormField({ label, htmlFor, optional, children }) {
   return (
     <div>
-      <label className="text-xs font-medium text-muted uppercase tracking-wide">
+      <label htmlFor={htmlFor} className="text-xs font-medium text-muted uppercase tracking-wide">
         {label} {optional && <span className="normal-case font-normal">(optional)</span>}
       </label>
       <div className="mt-1.5">{children}</div>
@@ -134,7 +134,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
   const [showPassword, setShowPassword] = useState(false);
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <FormField label="Full Name">
+      <FormField label="Full Name" htmlFor="uf-name">
         <input
           id="uf-name"
           required
@@ -146,7 +146,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
         />
       </FormField>
       {!isEdit && (
-        <FormField label="Email">
+        <FormField label="Email" htmlFor="uf-email">
           <input
             id="uf-email"
             required
@@ -160,7 +160,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
         </FormField>
       )}
       {!isEdit && (
-        <FormField label="Password">
+        <FormField label="Password" htmlFor="uf-password">
           <PasswordInputWithToggle
             id="uf-password"
             required
@@ -178,7 +178,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
         </FormField>
       )}
       {isEdit && (
-        <FormField label="New Password" optional>
+        <FormField label="New Password" htmlFor="uf-new-password" optional>
           <PasswordInputWithToggle
             id="uf-new-password"
             placeholder="Leave blank to keep current password"
@@ -197,7 +197,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
           )}
         </FormField>
       )}
-      <FormField label="Role">
+      <FormField label="Role" htmlFor="uf-role">
         <select
           id="uf-role"
           className="input"
@@ -208,7 +208,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
           <option value="admin">Admin</option>
         </select>
       </FormField>
-      <FormField label="Department">
+      <FormField label="Department" htmlFor="uf-dept">
         <select
           id="uf-dept"
           required
@@ -696,13 +696,13 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
               placeholder="Enter area code (e.g. 415)"
               value={searchArea}
               onChange={(e) => setSearchArea(e.target.value.replace(/\D/g, '').slice(0, 3))}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => e.key === 'Enter' && searchArea.length === 3 && handleSearch()}
               maxLength={3}
             />
           </div>
           <button
             onClick={handleSearch}
-            disabled={searching}
+            disabled={searching || searchArea.length < 3}
             className="btn-primary px-5 py-2.5 text-sm disabled:opacity-60"
           >
             {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}

@@ -179,6 +179,7 @@ export function TelnyxProvider({ children }) {
   }, []);
 
   const clearCallState = useCallback(() => {
+    answeredCallIdRef.current = null;
     setActiveCall(null);
     setActiveCallInfo(null);
     setActiveCallSdkState(null);
@@ -475,6 +476,8 @@ export function TelnyxProvider({ children }) {
   }, [incomingCall, releaseLocalMedia]);
 
   const hangup = useCallback(() => {
+    clearTimeout(callTimeoutRef.current);
+    callTimeoutRef.current = null;
     // Mark user-initiated so the terminal handler doesn't show "Call ended" toast
     userHangupRef.current = true;
 

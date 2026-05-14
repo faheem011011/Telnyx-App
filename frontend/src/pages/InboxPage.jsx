@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { callsApi } from '../services/api';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone, formatCallDate, formatDuration, toE164 } from '../utils/format';
 import Avatar from '../components/Avatar';
 
@@ -33,7 +33,7 @@ export default function InboxPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selected, setSelected] = useState(null);
-  const { makeCall } = useTwilio();
+  const { makeCall } = useTelnyx();
   const navigate = useNavigate();
 
   const handleSelect = useCallback(async (call) => {

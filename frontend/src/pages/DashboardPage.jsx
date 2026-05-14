@@ -659,6 +659,7 @@ export default function DashboardPage() {
   }, [isAdmin]);
 
   const fetchData = useCallback(async (silent = false) => {
+    if (range === 'custom' && (!debouncedStart || !debouncedEnd)) return;
     if (silent) {
       setRefreshing(true);
     } else {
@@ -776,7 +777,9 @@ export default function DashboardPage() {
     { icon: Mic,           label: 'Recordings',      value: fmtNum(s.recordings),      change: pctChange(s.recordings,      ps?.recordings)      },
   ] : [], [s, ps]);
 
-  const dateRangeInvalid = range === 'custom' && debouncedEnd && debouncedStart > debouncedEnd;
+  const dateRangeInvalid = range === 'custom' && (
+    !debouncedStart || !debouncedEnd || debouncedStart > debouncedEnd
+  );
 
   const pageBg = colors.isDark
     ? 'rgb(var(--bg-primary))'

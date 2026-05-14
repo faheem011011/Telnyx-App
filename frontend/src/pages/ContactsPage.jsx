@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Phone, MessageCircle, Star, Trash2, Edit2, X } from 'lucide-react';
 import { contactsApi } from '../services/api';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone, toE164 } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -14,7 +14,7 @@ export default function ContactsPage() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // contact being edited (or {} for new)
-  const { makeCall } = useTwilio();
+  const { makeCall } = useTelnyx();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';

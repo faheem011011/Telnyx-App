@@ -318,7 +318,11 @@ def get_analytics(
         if user_id:
             target_ids = [user_id]
         elif department:
-            dept_users = db.query(User.id).filter(User.department == department).all()
+            dept_users = db.query(User.id).filter(
+                User.department == department,
+                User.is_active == True,  # noqa: E712
+                User.deleted_at.is_(None),
+            ).all()
             target_ids = [r[0] for r in dept_users] or [-1]
         else:
             all_users = db.query(User.id).filter(User.is_active == True).all()

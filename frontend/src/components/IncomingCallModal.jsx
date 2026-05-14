@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Phone, PhoneOff } from 'lucide-react';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone } from '../utils/format';
 import Avatar from './Avatar';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // Play a US-standard dual-tone ring (440 Hz + 480 Hz, 2 s on / 4 s off)
 // using the Web Audio API — no audio file required.
@@ -68,6 +69,9 @@ function useRingtone() {
 function IncomingCallContent({ incomingCall, onAccept, onReject }) {
   useRingtone();
 
+  const containerRef = useRef(null);
+  useFocusTrap(containerRef);
+
   // For inbound calls the Telnyx WebRTC SDK exposes the caller's E.164 on
   // `incomingCall.from`. Never fall back to `destinationNumber` — that is
   // the receiver's own DID, not the caller.
@@ -78,11 +82,19 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
     incomingCall.options?.displayName        ||
     'Unknown caller';
 
+  const titleId = 'incoming-call-title';
+
   return (
     <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-live="assertive"
       className="fixed top-4 right-4 z-50 animate-slide-down"
       style={{ width: 308 }}
     >
+      <span id={titleId} className="sr-only">Incoming call from {formatPhone(from)}</span>
       <div
         style={{
           borderRadius: 20,
@@ -249,7 +261,7 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
 }
 
 export default function IncomingCallModal() {
-  const { incomingCall, acceptIncoming, rejectIncoming } = useTwilio();
+  const { incomingCall, acceptIncoming, rejectIncoming } = useTelnyx();
   if (!incomingCall) return null;
   return (
     <IncomingCallContent

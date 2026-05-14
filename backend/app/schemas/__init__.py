@@ -215,7 +215,7 @@ class ContactCreate(BaseModel):
     phone_number: str = Field(..., min_length=1, max_length=32)
     email: EmailStr | None = None
     company: str | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=2000)
     is_favorite: bool = False
 
 
@@ -224,7 +224,7 @@ class ContactUpdate(BaseModel):
     phone_number: str | None = None
     email: EmailStr | None = None
     company: str | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=2000)
     is_favorite: bool | None = None
     is_blocked: bool | None = None
 

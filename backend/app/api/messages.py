@@ -55,6 +55,8 @@ def _from_number(user: User, db: Session) -> str:
 
 @router.get("/conversations")
 def list_conversations(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -82,6 +84,9 @@ def list_conversations(
     latest_messages = (
         db.query(Message)
         .filter(Message.id.in_(db.query(latest_sub.c.id)))
+        .order_by(desc(Message.created_at))
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 

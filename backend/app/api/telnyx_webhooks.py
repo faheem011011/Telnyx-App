@@ -59,7 +59,7 @@ router = APIRouter(prefix="/api/telnyx", tags=["telnyx-webhooks"])
 
 
 # Reject events whose timestamp is more than this many seconds away from now (C-01).
-_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 7200  # 2h — covers Telnyx's full retry schedule
+_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 3900  # 65 min — covers Telnyx's full retry schedule (max retry at 60 min)
 
 
 # ---------------------------------------------------------------------------

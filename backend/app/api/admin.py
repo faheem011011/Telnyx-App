@@ -544,7 +544,7 @@ def delete_number(
 # Audit log
 # ============================================================
 
-@router.get("/audit-logs", response_model=list[AuditLogOut])
+@router.get("/audit-logs")
 def list_audit_logs(
     action: str | None = Query(None, description="Filter by action, e.g. user.create"),
     resource_type: str | None = Query(None),
@@ -552,11 +552,17 @@ def list_audit_logs(
     skip: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
-) -> list[AuditLogOut]:
+) -> dict:
     q = db.query(AuditLog)
     if action:
         q = q.filter(AuditLog.action == action)
     if resource_type:
         q = q.filter(AuditLog.resource_type == resource_type)
+    total = q.count()
     logs = q.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
-    return [AuditLogOut.model_validate(entry) for entry in logs]
+    return {
+        "items": [AuditLogOut.model_validate(entry) for entry in logs],
+        "total": total,
+        "offset": skip,
+        "limit": limit,
+    }

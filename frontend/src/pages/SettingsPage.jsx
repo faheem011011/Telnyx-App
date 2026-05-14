@@ -4,7 +4,7 @@ import {
   Eye, EyeOff, KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { adminApi, authApi } from '../services/api';
 import { formatPhone } from '../utils/format';
 
@@ -14,7 +14,7 @@ const MIN_PASSWORD_LENGTH = 12;
 
 export default function SettingsPage() {
   const { user, logout, refreshUser } = useAuth();
-  const { deviceReady, deviceError } = useTwilio();
+  const { deviceReady, deviceError } = useTelnyx();
   const isAdmin = user?.role === 'admin';
 
   return (
