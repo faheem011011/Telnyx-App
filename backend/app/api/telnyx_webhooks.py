@@ -294,16 +294,21 @@ def _claim_event(db: Session, event_id: str, event_type: str) -> bool:
 def _texml_event_id(route_name: str, form_data: dict) -> str:
     """Derive a stable event id for form-encoded TeXML retries.
 
-    Telnyx retries TeXML deliveries on transient failures with the same CallSid
-    and DialCallStatus/CallStatus values, so we synthesise an id from the route
-    and those identifying fields. Returns "" when CallSid is absent so dedupe
-    is skipped (matches the design note in the audit).
+    Primary key: route + CallSid + status (Telnyx retries with identical values).
+    Fallback when CallSid is absent: route + From + To + timestamp so that a
+    malformed or proxy-stripped webhook is still deduplicated and cannot create
+    duplicate Call rows on retry.
     """
     call_sid = form_data.get("CallSid") or ""
-    if not call_sid:
-        return ""
     status = form_data.get("DialCallStatus") or form_data.get("CallStatus") or ""
-    return f"{route_name}:{call_sid}:{status}"
+    if call_sid:
+        return f"{route_name}:{call_sid}:{status}"
+    from_num = form_data.get("From") or ""
+    to_num   = form_data.get("To") or ""
+    ts       = form_data.get("Timestamp") or form_data.get("ApiVersion") or ""
+    if from_num and to_num:
+        return f"{route_name}:{from_num}:{to_num}:{ts}"
+    return ""  # Still empty — _claim_event will allow through as before
 
 
 # ---------------------------------------------------------------------------

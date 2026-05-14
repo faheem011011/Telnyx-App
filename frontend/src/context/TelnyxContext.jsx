@@ -385,6 +385,9 @@ export function TelnyxProvider({ children }) {
     if (!clientRef.current || !deviceReady) {
       throw new Error('Phone not ready. Try again in a moment.');
     }
+    if (activeCallRef.current) {
+      throw new Error('A call is already in progress.');
+    }
     // Open the mic ourselves and hold onto the stream so we can guarantee it
     // gets stopped on terminal state. The SDK opens its own internal stream
     // but does not always release it on failed setups, leaving the browser's
@@ -510,8 +513,12 @@ export function TelnyxProvider({ children }) {
       }
     } catch (e) {
       console.error('[Telnyx] Recording error', e);
+      setCallNotification({
+        type: 'failed',
+        message: `Recording ${recording ? 'stop' : 'start'} failed`,
+      });
     }
-  }, [recording]);
+  }, [recording, setCallNotification]);
 
   const value = {
     deviceReady,

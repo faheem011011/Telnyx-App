@@ -111,6 +111,12 @@ def update_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    if user_id == current_admin.id and payload.role is not None and payload.role != current_admin.role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role. Ask another admin.",
+        )
+
     changes: dict = {}
     if payload.name is not None and payload.name != user.name:
         changes["name"] = {"from": user.name, "to": payload.name}
