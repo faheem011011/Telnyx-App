@@ -602,6 +602,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
   const [purchasing, setPurchasing] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [pendingAssign, setPendingAssign] = useState(null); // { numberId, userId, phone, userName }
 
   const handleSearch = async () => {
     setSearching(true);
@@ -644,7 +645,9 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
     }
   };
 
-  const handleAssign = async (numberId, userId) => {
+  const confirmAssign = async () => {
+    const { numberId, userId } = pendingAssign;
+    setPendingAssign(null);
     try {
       if (userId) {
         await adminApi.assignNumber(numberId, parseInt(userId));
@@ -744,6 +747,30 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
         )}
       </div>
 
+      {pendingAssign && (
+        <Modal title="Confirm Assignment" onClose={() => setPendingAssign(null)}>
+          <p className="text-sm text-muted mb-5">
+            {pendingAssign.userId
+              ? <>Assign <strong>{formatPhone(pendingAssign.phone)}</strong> to <strong>{pendingAssign.userName}</strong>?</>
+              : <>Unassign <strong>{formatPhone(pendingAssign.phone)}</strong>?</>}
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPendingAssign(null)}
+              className="flex-1 btn-ghost surface-tertiary py-2.5 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmAssign}
+              className="flex-1 btn-primary py-2.5 text-sm"
+            >
+              Confirm
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* Inventory */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -801,7 +828,16 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
                       <select
                         className="input text-sm py-1.5 max-w-[180px]"
                         value={n.assigned_to_user_id || ''}
-                        onChange={(e) => handleAssign(n.id, e.target.value)}
+                        onChange={(e) => {
+                          const userId = e.target.value;
+                          const newUser = (users || []).find((u) => u.id === parseInt(userId));
+                          setPendingAssign({
+                            numberId: n.id,
+                            userId,
+                            phone: n.phone_number,
+                            userName: newUser?.name || 'this user',
+                          });
+                        }}
                       >
                         <option value="">Unassigned</option>
                         {(users || []).filter(u => u.role === 'user').map((u) => (

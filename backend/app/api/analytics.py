@@ -143,15 +143,19 @@ def _parse_iso(s: str) -> datetime | None:
     return dt
 
 
-def _get_window(range_str: str, start: str | None, end: str | None):
-    now = datetime.now(timezone.utc)
+def _get_window(range_str: str, start: str | None, end: str | None, utc_offset: int = 0):
+    now_utc = datetime.now(timezone.utc)
+    tz_delta = timedelta(minutes=max(-840, min(840, utc_offset)))
     if range_str == "1d":
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end   = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-        return day_start, day_end
+        # Compute midnight-to-midnight in the caller's local timezone, then
+        # convert back to UTC so DB queries use the correct day boundaries.
+        now_local = now_utc + tz_delta
+        local_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        local_end   = now_local.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return local_start - tz_delta, local_end - tz_delta
     deltas = {"7d": 7, "30d": 30, "90d": 90}
     if range_str in deltas:
-        return now - timedelta(days=deltas[range_str]), now
+        return now_utc - timedelta(days=deltas[range_str]), now_utc
     if range_str == "custom" and start and end:
         # M-20: only accept tz-aware ISO timestamps; fall back to default 7d if
         # either bound is naive or unparsable.
@@ -159,7 +163,7 @@ def _get_window(range_str: str, start: str | None, end: str | None):
         pe = _parse_iso(end)
         if ps is not None and pe is not None:
             return ps, pe
-    return now - timedelta(days=7), now
+    return now_utc - timedelta(days=7), now_utc
 
 
 def _extract_area_code(number: str) -> str:
@@ -305,7 +309,7 @@ def get_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    period_start, period_end = _get_window(period, start, end)
+    period_start, period_end = _get_window(period, start, end, utc_offset)
     period_length = period_end - period_start
     prev_start    = period_start - period_length
     prev_end      = period_start
@@ -496,11 +500,12 @@ def get_users_summary(
     end:        str | None = Query(None),
     user_id:    int | None = Query(None),
     department: str | None = Query(None),
+    utc_offset: int        = Query(0),
     db:         Session    = Depends(get_db),
     _admin:     User       = Depends(require_admin),
 ):
     """Per-user metric rows used for CSV export (admin only)."""
-    period_start, period_end = _get_window(period, start, end)
+    period_start, period_end = _get_window(period, start, end, utc_offset)
 
     user_q = db.query(User).filter(User.is_active.is_(True))
     if user_id:

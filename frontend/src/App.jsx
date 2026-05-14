@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from 'react';
+import { useState, useEffect, useCallback, useRef, Component } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import api from './services/api';
@@ -116,6 +116,25 @@ function AdminLayout() {
 // navigates between routes (or when the role-based layout switches).
 // This prevents in-progress calls from dropping due to provider unmount.
 function AuthenticatedShell({ user }) {
+  const { logout } = useAuth();
+  const timerRef = useRef(null);
+  const IDLE_MS = 30 * 60 * 1000; // 30 minutes
+
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(logout, IDLE_MS);
+  }, [logout]);
+
+  useEffect(() => {
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, resetTimer));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [resetTimer]);
+
   return (
     <TelnyxProvider>
       {user.role === 'admin' ? <AdminLayout /> : <UserLayout />}

@@ -2,6 +2,7 @@
 import hashlib
 import logging
 import secrets
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
@@ -29,6 +30,24 @@ from app.services.verification import issue_verification_token, make_verificatio
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# Per-email rate limiting for password reset — max 3 requests per hour per address.
+# In-memory only; resets on process restart, which is acceptable for this use-case.
+_reset_attempts: dict[str, list] = defaultdict(list)
+_RESET_EMAIL_MAX = 3
+_RESET_EMAIL_WINDOW = timedelta(hours=1)
+
+
+def _reset_email_allowed(email: str) -> bool:
+    """Returns True and records the attempt if within the limit; False if exceeded."""
+    now = datetime.now(timezone.utc)
+    key = email.lower()
+    cutoff = now - _RESET_EMAIL_WINDOW
+    _reset_attempts[key] = [t for t in _reset_attempts[key] if t > cutoff]
+    if len(_reset_attempts[key]) >= _RESET_EMAIL_MAX:
+        return False
+    _reset_attempts[key].append(now)
+    return True
 
 
 _INVALID_CREDS = HTTPException(
@@ -203,11 +222,7 @@ def setup(
 def forgot_password(
     request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)
 ) -> None:
-    """Request a password reset email. Always returns 204 to prevent email enumeration.
-
-    NOTE: combined per-email rate limiting is a future enhancement; the IP-bucket
-    limiter above is the only throttle today.
-    """
+    """Request a password reset email. Always returns 204 to prevent email enumeration."""
     user = db.query(User).filter(
         User.email == payload.email,
         User.is_active == True,  # noqa: E712
@@ -215,6 +230,10 @@ def forgot_password(
 
     if not user:
         # Do not signal whether the address exists — silently no-op.
+        return
+
+    if not _reset_email_allowed(user.email):
+        # Silently no-op so the rate limit doesn't reveal whether the address exists.
         return
 
     # Invalidate any outstanding tokens for this user
