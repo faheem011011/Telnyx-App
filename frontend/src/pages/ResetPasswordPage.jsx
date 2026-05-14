@@ -45,7 +45,7 @@ export default function ResetPasswordPage() {
       label: 'New password',
       required: true,
       type: 'password',
-      placeholder: 'At least 6 characters',
+      placeholder: 'At least 12 chars (A-z, 0-9, special)',
       autoComplete: 'new-password',
       onChange: (e) => setPassword(e.target.value),
     },

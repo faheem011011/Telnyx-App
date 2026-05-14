@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PhoneOff, Mic, MicOff, Grid3x3, Circle, Square } from 'lucide-react';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone, formatDuration } from '../utils/format';
 import Avatar from './Avatar';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
@@ -56,9 +57,11 @@ function ControlBtn({ onClick, active, activeColor = '#2563eb', children, title,
 }
 
 export default function ActiveCallPanel() {
-  const { activeCall, activeCallInfo, activeCallSdkState, muted, toggleMute, hangup, sendDigit, recording, toggleRecording } = useTwilio();
+  const { activeCall, activeCallInfo, activeCallSdkState, muted, toggleMute, hangup, sendDigit, recording, toggleRecording } = useTelnyx();
   const [elapsed, setElapsed]       = useState(0);
   const [showKeypad, setShowKeypad] = useState(false);
+  const containerRef = useRef(null);
+  useFocusTrap(containerRef);
 
   useEffect(() => {
     if (!activeCallInfo?.connected) { setElapsed(0); return; }
@@ -81,6 +84,10 @@ export default function ActiveCallPanel() {
 
   return (
     <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Active call with ${formatPhone(number)}`}
       className="fixed bottom-6 right-6 z-40 animate-slide-up"
       style={{ width: 296 }}
     >

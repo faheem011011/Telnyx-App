@@ -121,6 +121,7 @@ def list_calls(
     filter: str = Query("all", pattern="^(all|unread|missed|voicemails|recordings|starred)$"),
     search: str | None = Query(None),
     limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -142,7 +143,7 @@ def list_calls(
         pattern = f"%{search}%"
         q = q.filter(or_(Call.from_number.ilike(pattern), Call.to_number.ilike(pattern)))
 
-    calls = q.order_by(desc(Call.started_at)).limit(limit).all()
+    calls = q.order_by(desc(Call.started_at)).offset(offset).limit(limit).all()
     return _attach_contacts(calls, db, current_user.id, is_admin=current_user.role == "admin")
 
 

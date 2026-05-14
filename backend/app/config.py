@@ -38,6 +38,18 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     resend_from_email: str = "noreply@yourdomain.com"
 
+    # CORS — comma-separated list of allowed origins
+    cors_origins: str = (
+        "http://localhost:5173,http://localhost:5174,"
+        "https://call.alphabridgeconsulting.ai,https://phone.alphabridgeconsulting.ai"
+    )
+
+    # Logging
+    log_level: str = "INFO"
+
+    # Sentry — leave empty to disable error tracking
+    sentry_dsn: str = ""
+
     @property
     def resolved_database_url(self) -> str:
         """Railway provides postgres:// but SQLAlchemy requires postgresql://."""

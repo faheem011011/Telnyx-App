@@ -55,6 +55,8 @@ def _from_number(user: User, db: Session) -> str:
 
 @router.get("/conversations")
 def list_conversations(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -82,6 +84,9 @@ def list_conversations(
     latest_messages = (
         db.query(Message)
         .filter(Message.id.in_(db.query(latest_sub.c.id)))
+        .order_by(desc(Message.created_at))
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
@@ -130,10 +135,12 @@ def list_conversations(
 @router.get("/thread/{phone_number}", response_model=list[MessageOut])
 def get_thread(
     phone_number: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return the full message history with a given phone number."""
+    """Return paginated message history with a given phone number."""
     phone_number = _normalize_phone(phone_number)
     messages = db.query(Message).filter(
         Message.owner_id == current_user.id,
@@ -141,7 +148,7 @@ def get_thread(
             and_(Message.direction == "inbound", Message.from_number == phone_number),
             and_(Message.direction == "outbound", Message.to_number == phone_number),
         ),
-    ).order_by(Message.created_at.asc()).all()
+    ).order_by(Message.created_at.asc()).offset(offset).limit(limit).all()
 
     # Mark inbound messages as read
     db.query(Message).filter(
@@ -167,9 +174,11 @@ def send_message(
     try:
         result = send_sms(payload.to_number, payload.body, from_num)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send SMS: {e}")
+        log.warning("SMS validation error to=%s: %s", payload.to_number, e)
+        raise HTTPException(status_code=400, detail="Invalid phone number or message.")
+    except Exception:
+        log.exception("SMS send failed to=%s", payload.to_number)
+        raise HTTPException(status_code=500, detail="SMS service temporarily unavailable.")
 
     msg = Message(
         owner_id=current_user.id,

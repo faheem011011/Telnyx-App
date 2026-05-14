@@ -36,6 +36,14 @@ export default function SetupPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    if (password.length < 12) {
+      setError('Password must be at least 12 characters.');
+      return;
+    }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*()_+\-=[\]{}|;':",./<>?]/.test(password)) {
+      setError('Password must contain uppercase, lowercase, a digit, and a special character.');
+      return;
+    }
     setLoading(true);
     try {
       await authApi.setup(name, email, password);
@@ -75,7 +83,7 @@ export default function SetupPage() {
       label: 'Password',
       required: true,
       type: 'password',
-      placeholder: 'At least 6 characters',
+      placeholder: 'At least 12 chars (A-z, 0-9, special)',
       autoComplete: 'off',
       onChange: (e) => setPassword(e.target.value),
     },

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { callsApi } from '../services/api';
 import Avatar from './Avatar';
 import { formatPhone } from '../utils/format';
@@ -22,7 +22,7 @@ const USER_NAV = [
   { to: '/inbox',     icon: Inbox,         label: 'Inbox',       showBadge: true },
   { to: '/contacts',  icon: Contact,        label: 'Contacts' },
   { to: '/messages',  icon: MessageCircle,  label: 'Messages' },
-  { to: '/scheduled', icon: Calendar,       label: 'Scheduled' },
+  { to: '/scheduled', icon: Calendar,       label: 'Scheduled',   comingSoon: true },
 ];
 
 const ADMIN_NAV = [
@@ -31,7 +31,7 @@ const ADMIN_NAV = [
   { to: '/inbox',     icon: Inbox,           label: 'Inbox',       showBadge: true },
   { to: '/contacts',  icon: Contact,         label: 'Contacts' },
   { to: '/messages',  icon: MessageCircle,   label: 'Messages' },
-  { to: '/scheduled', icon: Calendar,        label: 'Scheduled' },
+  { to: '/scheduled', icon: Calendar,        label: 'Scheduled',   comingSoon: true },
 ];
 
 export default function Sidebar({ onOpenDialer }) {
@@ -41,7 +41,7 @@ export default function Sidebar({ onOpenDialer }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
-  const { deviceReady, deviceError } = useTwilio();
+  const { deviceReady, deviceError } = useTelnyx();
   const isAdmin = user?.role === 'admin';
   const navItems = isAdmin ? ADMIN_NAV : USER_NAV;
 
@@ -116,7 +116,7 @@ export default function Sidebar({ onOpenDialer }) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
-        {navItems.map(({ to, icon: Icon, label, showBadge }) => (
+        {navItems.map(({ to, icon: Icon, label, showBadge, comingSoon }) => (
           <NavLink key={to} to={to} className={navLinkClass} style={navLinkStyle}>
             <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
             <span className="flex-1 truncate">{label}</span>
@@ -124,6 +124,12 @@ export default function Sidebar({ onOpenDialer }) {
               <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
                 style={{ background: 'rgba(255,255,255,0.95)', color: '#07438C' }}>
                 {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+            {comingSoon && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.7)' }}>
+                Soon
               </span>
             )}
           </NavLink>

@@ -111,6 +111,12 @@ def update_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    if user_id == current_admin.id and payload.role is not None and payload.role != current_admin.role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role. Ask another admin.",
+        )
+
     changes: dict = {}
     if payload.name is not None and payload.name != user.name:
         changes["name"] = {"from": user.name, "to": payload.name}
@@ -538,7 +544,7 @@ def delete_number(
 # Audit log
 # ============================================================
 
-@router.get("/audit-logs", response_model=list[AuditLogOut])
+@router.get("/audit-logs")
 def list_audit_logs(
     action: str | None = Query(None, description="Filter by action, e.g. user.create"),
     resource_type: str | None = Query(None),
@@ -546,11 +552,17 @@ def list_audit_logs(
     skip: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
-) -> list[AuditLogOut]:
+) -> dict:
     q = db.query(AuditLog)
     if action:
         q = q.filter(AuditLog.action == action)
     if resource_type:
         q = q.filter(AuditLog.resource_type == resource_type)
+    total = q.count()
     logs = q.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
-    return [AuditLogOut.model_validate(entry) for entry in logs]
+    return {
+        "items": [AuditLogOut.model_validate(entry) for entry in logs],
+        "total": total,
+        "offset": skip,
+        "limit": limit,
+    }

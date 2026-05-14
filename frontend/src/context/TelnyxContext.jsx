@@ -132,6 +132,7 @@ export function TelnyxProvider({ children }) {
   //   tracks, so the browser keeps the "microphone in use" indicator on. We
   //   keep an explicit handle and stop the tracks ourselves on terminal state.
   const micStreamRef        = useRef(null);
+  const callTimeoutRef      = useRef(null);
 
   const [deviceReady,       setDeviceReady]       = useState(false);
   const [deviceError,       setDeviceError]       = useState(null);
@@ -178,6 +179,7 @@ export function TelnyxProvider({ children }) {
   }, []);
 
   const clearCallState = useCallback(() => {
+    answeredCallIdRef.current = null;
     setActiveCall(null);
     setActiveCallInfo(null);
     setActiveCallSdkState(null);
@@ -189,6 +191,8 @@ export function TelnyxProvider({ children }) {
   // Helper: cleanly terminate a call that died outside normal hangup flow
   // (WebSocket drop, SDK error, etc.) and optionally show a notification.
   const _forceCleanup = useCallback((message) => {
+    clearTimeout(callTimeoutRef.current);
+    callTimeoutRef.current  = null;
     const wasConn = wasConnectedRef.current;
     const dyingCall = activeCallRef.current;
     activeCallRef.current   = null;
@@ -277,6 +281,8 @@ export function TelnyxProvider({ children }) {
 
           // ── Active (both directions) ──────────────────────────────────────
           if (state === 'active') {
+            clearTimeout(callTimeoutRef.current);
+            callTimeoutRef.current  = null;
             activeCallRef.current   = call;
             wasConnectedRef.current = true;
             if (!cancelled) {
@@ -385,6 +391,9 @@ export function TelnyxProvider({ children }) {
     if (!clientRef.current || !deviceReady) {
       throw new Error('Phone not ready. Try again in a moment.');
     }
+    if (activeCallRef.current) {
+      throw new Error('A call is already in progress.');
+    }
     // Open the mic ourselves and hold onto the stream so we can guarantee it
     // gets stopped on terminal state. The SDK opens its own internal stream
     // but does not always release it on failed setups, leaving the browser's
@@ -404,6 +413,13 @@ export function TelnyxProvider({ children }) {
     activeCallRef.current   = call;
     wasConnectedRef.current = false;
     userHangupRef.current   = false;
+
+    // Auto-cancel if the call never connects within 45 seconds.
+    callTimeoutRef.current = setTimeout(() => {
+      if (activeCallRef.current && !wasConnectedRef.current) {
+        _forceCleanup('Call timed out — no answer.');
+      }
+    }, 45_000);
 
     setActiveCall(call);
     setActiveCallSdkState(null);   // SDK will drive state via notifications
@@ -460,6 +476,8 @@ export function TelnyxProvider({ children }) {
   }, [incomingCall, releaseLocalMedia]);
 
   const hangup = useCallback(() => {
+    clearTimeout(callTimeoutRef.current);
+    callTimeoutRef.current = null;
     // Mark user-initiated so the terminal handler doesn't show "Call ended" toast
     userHangupRef.current = true;
 
@@ -510,8 +528,12 @@ export function TelnyxProvider({ children }) {
       }
     } catch (e) {
       console.error('[Telnyx] Recording error', e);
+      setCallNotification({
+        type: 'failed',
+        message: `Recording ${recording ? 'stop' : 'start'} failed`,
+      });
     }
-  }, [recording]);
+  }, [recording, setCallNotification]);
 
   const value = {
     deviceReady,

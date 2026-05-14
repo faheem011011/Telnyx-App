@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Phone, ChevronLeft } from 'lucide-react';
-import { useTelnyx as useTwilio } from '../context/TelnyxContext';
+import { useTelnyx } from '../context/TelnyxContext';
 import { toE164, formatPhone } from '../utils/format';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 const KEYS = [
   { digit: '1', sub: '' },
@@ -23,18 +24,22 @@ export default function Dialer({ onClose, defaultNumber = '' }) {
   const [error, setError]     = useState(null);
   const [calling, setCalling] = useState(false);
   const [flash, setFlash]     = useState(null);
-  const { makeCall, deviceReady, activeCall } = useTwilio();
+  const { makeCall, deviceReady, activeCall } = useTelnyx();
+  const containerRef = useRef(null);
+  useFocusTrap(containerRef);
 
   useEffect(() => {
     const handler = (e) => {
+      if (e.key === 'Escape' && e.target.tagName !== 'INPUT') {
+        onClose();
+        return;
+      }
       if (e.target.tagName === 'INPUT') return;
       if (/[0-9*#+]/.test(e.key)) {
         setNumber((n) => n + e.key);
         triggerFlash(e.key);
       } else if (e.key === 'Backspace') {
         setNumber((n) => n.slice(0, -1));
-      } else if (e.key === 'Escape') {
-        onClose();
       }
     };
     window.addEventListener('keydown', handler);
@@ -79,6 +84,10 @@ export default function Dialer({ onClose, defaultNumber = '' }) {
 
   return (
     <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Dialer"
       className="fixed bottom-6 right-6 z-50 animate-slide-up"
       style={{ width: 304 }}
     >

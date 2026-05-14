@@ -59,7 +59,7 @@ router = APIRouter(prefix="/api/telnyx", tags=["telnyx-webhooks"])
 
 
 # Reject events whose timestamp is more than this many seconds away from now (C-01).
-_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 7200  # 2h — covers Telnyx's full retry schedule
+_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 3900  # 65 min — covers Telnyx's full retry schedule (max retry at 60 min)
 
 
 # ---------------------------------------------------------------------------
@@ -294,16 +294,21 @@ def _claim_event(db: Session, event_id: str, event_type: str) -> bool:
 def _texml_event_id(route_name: str, form_data: dict) -> str:
     """Derive a stable event id for form-encoded TeXML retries.
 
-    Telnyx retries TeXML deliveries on transient failures with the same CallSid
-    and DialCallStatus/CallStatus values, so we synthesise an id from the route
-    and those identifying fields. Returns "" when CallSid is absent so dedupe
-    is skipped (matches the design note in the audit).
+    Primary key: route + CallSid + status (Telnyx retries with identical values).
+    Fallback when CallSid is absent: route + From + To + timestamp so that a
+    malformed or proxy-stripped webhook is still deduplicated and cannot create
+    duplicate Call rows on retry.
     """
     call_sid = form_data.get("CallSid") or ""
-    if not call_sid:
-        return ""
     status = form_data.get("DialCallStatus") or form_data.get("CallStatus") or ""
-    return f"{route_name}:{call_sid}:{status}"
+    if call_sid:
+        return f"{route_name}:{call_sid}:{status}"
+    from_num = form_data.get("From") or ""
+    to_num   = form_data.get("To") or ""
+    ts       = form_data.get("Timestamp") or form_data.get("ApiVersion") or ""
+    if from_num and to_num:
+        return f"{route_name}:{from_num}:{to_num}:{ts}"
+    return ""  # Still empty — _claim_event will allow through as before
 
 
 # ---------------------------------------------------------------------------
@@ -764,9 +769,14 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     if not _claim_event(db, _texml_event_id("call-status", form_data), "call-status"):
         return _xml("<Response></Response>")
 
+    _TERMINAL = {"completed", "missed", "busy", "no-answer", "failed"}
+
     call = db.query(Call).filter(Call.call_sid == call_sid).first()
     if call:
-        if call_status:
+        # Only write status when: current is not terminal, OR new value is terminal.
+        # This stops a late "ringing"/"in-progress" webhook from overwriting
+        # a "completed" status that arrived first.
+        if call_status and (call.status not in _TERMINAL or call_status in _TERMINAL):
             call.status = call_status
         # M-08: only update duration when the incoming value is greater so a
         # racing /post-dial cannot reset duration to 0 after this handler set it.

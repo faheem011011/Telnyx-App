@@ -15,7 +15,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401, clear token and reload
+// On 401, clear token and reload; on 429, surface a friendly rate-limit message
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -24,6 +24,11 @@ api.interceptors.response.use(
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
+    }
+    if (err.response?.status === 429) {
+      const rateLimitErr = new Error('Too many requests — please wait a moment and try again.');
+      rateLimitErr.isRateLimit = true;
+      return Promise.reject(rateLimitErr);
     }
     return Promise.reject(err);
   }
