@@ -158,7 +158,7 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
               {formatPhone(from)}
             </div>
             <div style={{ fontSize: 11.5, color: '#64748b' }}>
-              calling your Telnyx number
+              calling you
             </div>
           </div>
         </div>

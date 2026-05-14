@@ -1,10 +1,13 @@
 """Audit logging — records every admin action to the database."""
+import logging
 import re
 
 from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.models import AuditLog, User
+
+log = logging.getLogger(__name__)
 
 
 _EMAIL_RE = re.compile(r"^([^@]+)@(.+)$")
@@ -50,7 +53,14 @@ def log_audit(
     detail: dict | None = None,
     ip_address: str | None = None,
 ) -> None:
-    """Append an audit entry to the session. Caller is responsible for commit."""
+    """Write an audit entry in its own transaction, independent of the caller's session.
+
+    Using a separate session guarantees the record is committed even if the
+    caller's transaction is later rolled back. Failures are logged but never
+    propagated — audit must not break the primary operation.
+    """
+    from app.database import SessionLocal  # local import avoids circular dependency
+
     entry = AuditLog(
         actor_id=actor.id,
         actor_email=actor.email,
@@ -60,4 +70,12 @@ def log_audit(
         detail=_redact(detail),
         ip_address=ip_address,
     )
-    db.add(entry)
+    audit_db = SessionLocal()
+    try:
+        audit_db.add(entry)
+        audit_db.commit()
+    except Exception:
+        audit_db.rollback()
+        log.warning("Audit write failed: action=%s actor_id=%s", action, actor.id)
+    finally:
+        audit_db.close()
