@@ -5,9 +5,13 @@ so both verification and password-reset mails share the same layout. Only the
 title, body copy, button label, button URL, and expiry text vary per message.
 Wire-level HTML is unchanged from the previous inline templates.
 """
+import logging
+
 import resend
 
 from app.config import settings
+
+log = logging.getLogger(__name__)
 
 
 _BASE_TEMPLATE = """
@@ -79,33 +83,39 @@ def _render(*, title: str, intro: str, button_text: str, button_url: str, expiry
 
 def send_verification_email(to_email: str, verify_url: str) -> None:
     resend.api_key = settings.resend_api_key
-    resend.Emails.send({
-        "from": settings.resend_from_email,
-        "to": to_email,
-        "subject": "Verify your AlphaCall email address",
-        "html": _render(
-            title="Verify your email address",
-            intro="Your AlphaCall account has been created. Click the button below to verify your email and activate your account.",
-            button_text="Verify email address",
-            button_url=verify_url,
-            expiry="24 hours",
-            disclaimer="If you did not expect this email, you can safely ignore it.",
-        ),
-    })
+    try:
+        resend.Emails.send({
+            "from": settings.resend_from_email,
+            "to": to_email,
+            "subject": "Verify your AlphaCall email address",
+            "html": _render(
+                title="Verify your email address",
+                intro="Your AlphaCall account has been created. Click the button below to verify your email and activate your account.",
+                button_text="Verify email address",
+                button_url=verify_url,
+                expiry="24 hours",
+                disclaimer="If you did not expect this email, you can safely ignore it.",
+            ),
+        })
+    except Exception:
+        log.exception("Failed to send verification email to %s", to_email)
 
 
 def send_password_reset_email(to_email: str, reset_url: str) -> None:
     resend.api_key = settings.resend_api_key
-    resend.Emails.send({
-        "from": settings.resend_from_email,
-        "to": to_email,
-        "subject": "Reset your AlphaCall password",
-        "html": _render(
-            title="Reset your password",
-            intro="We received a request to reset the password for your AlphaCall account. Click the button below to choose a new password.",
-            button_text="Reset password",
-            button_url=reset_url,
-            expiry="1 hour",
-            disclaimer="If you didn't request a password reset, you can safely ignore this email — your password will remain unchanged.",
-        ),
-    })
+    try:
+        resend.Emails.send({
+            "from": settings.resend_from_email,
+            "to": to_email,
+            "subject": "Reset your AlphaCall password",
+            "html": _render(
+                title="Reset your password",
+                intro="We received a request to reset the password for your AlphaCall account. Click the button below to choose a new password.",
+                button_text="Reset password",
+                button_url=reset_url,
+                expiry="1 hour",
+                disclaimer="If you didn't request a password reset, you can safely ignore this email — your password will remain unchanged.",
+            ),
+        })
+    except Exception:
+        log.exception("Failed to send password reset email to %s", to_email)

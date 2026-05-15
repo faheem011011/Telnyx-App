@@ -20,8 +20,8 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+        sans: ['system-ui', '-apple-system', 'sans-serif'],
+        display: ['system-ui', '-apple-system', 'sans-serif'],
       },
       animation: {
         'fade-in':    'fade-in 0.2s ease-out',

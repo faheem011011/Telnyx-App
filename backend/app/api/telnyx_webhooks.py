@@ -61,6 +61,43 @@ router = APIRouter(prefix="/api/telnyx", tags=["telnyx-webhooks"])
 # Reject events whose timestamp is more than this many seconds away from now (C-01).
 _WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 3900  # 65 min — covers Telnyx's full retry schedule (max retry at 60 min)
 
+# M-09: explicit allowlist of call statuses the application understands.
+# Any value Telnyx sends that is not in this set is mapped to "failed" and
+# logged at WARNING so operators can track unexpected upstream API changes.
+_STATUS_ALLOWED: frozenset[str] = frozenset({
+    "initiated",
+    "ringing",
+    "in-progress",
+    "completed",
+    "missed",
+    "busy",
+    "no-answer",
+    "failed",
+    "canceled",
+})
+
+# Statuses from which a call must not regress to a non-terminal state.
+_TERMINAL: frozenset[str] = frozenset({
+    "completed", "missed", "busy", "no-answer", "failed", "canceled",
+})
+
+
+def _normalize_call_status(raw: str) -> str:
+    """Validate and normalise a Telnyx-supplied call status string.
+
+    Returns the value unchanged when it is in the allowlist.  Unknown values
+    are logged at WARNING (giving operators visibility into new or unexpected
+    Telnyx status strings) and mapped to ``"failed"`` so the call reaches a
+    known terminal state rather than being silently persisted verbatim.
+    """
+    if raw in _STATUS_ALLOWED:
+        return raw
+    log.warning(
+        "call status %r is not in the allowed set %s; persisting as 'failed'",
+        raw, sorted(_STATUS_ALLOWED),
+    )
+    return "failed"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -115,19 +152,20 @@ def _resolve_user_by_to_number(to_number: str, db: Session) -> User | None:
 
     C-03: returns None when the inbound number is not assigned to any tenant —
     no fallback to a "primary user". Callers must handle None gracefully.
+
+    C-08: PhoneNumber.assigned_to_user_id is the single authoritative source of
+    routing truth. The legacy User.phone_number fallback has been removed; it
+    allowed inbound calls/SMS to keep reaching a formerly-assigned user after an
+    admin unassigned the number, because unassign_number() did not previously
+    clear User.phone_number.  Both fields are now cleared atomically on unassign.
     """
     if not to_number:
         return None
     pn = db.query(PhoneNumber).filter(PhoneNumber.phone_number == to_number).first()
     if pn and pn.assigned_to_user_id:
-        user = db.query(User).filter(
+        return db.query(User).filter(
             User.id == pn.assigned_to_user_id, User.is_active.is_(True)
         ).first()
-        if user:
-            return user
-    user = db.query(User).filter(User.phone_number == to_number).first()
-    if user:
-        return user
     return None
 
 
@@ -561,7 +599,8 @@ async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str)
 
 
 def _v2_handle_answered(db: Session, call_control_id: str) -> Response:
-    call = db.query(Call).filter(Call.call_sid == call_control_id).first()
+    # H-26: lock so concurrent v2 event handlers serialize on the same call row.
+    call = db.query(Call).filter(Call.call_sid == call_control_id).with_for_update().first()
     if call:
         call.status = "in-progress"
         try:
@@ -573,7 +612,8 @@ def _v2_handle_answered(db: Session, call_control_id: str) -> Response:
 
 
 def _v2_handle_hangup(db: Session, payload: dict, call_control_id: str) -> Response:
-    call = db.query(Call).filter(Call.call_sid == call_control_id).first()
+    # H-26: lock so concurrent hangup/answered events cannot race on status.
+    call = db.query(Call).filter(Call.call_sid == call_control_id).with_for_update().first()
     if not call:
         return Response(status_code=204)
 
@@ -590,7 +630,7 @@ def _v2_handle_hangup(db: Session, payload: dict, call_control_id: str) -> Respo
     elif hangup_cause in ("no_answer", "no_user_response"):
         call.status = "no-answer"
     elif hangup_cause in ("originator_cancel",):
-        call.status = "missed"
+        call.status = "canceled"
     else:
         # Default — keep current unless still 'initiated'/'ringing'
         if call.status in ("initiated", "ringing", None):
@@ -717,7 +757,10 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
         return _xml("<Response></Response>")
 
     if call_sid:
-        call = db.query(Call).filter(Call.call_sid == call_sid).first()
+        # H-26: lock the row so a concurrent /call-status handler cannot read
+        # stale state, pass the terminal-state guard, and then overwrite this
+        # handler's final status write (or vice-versa).
+        call = db.query(Call).filter(Call.call_sid == call_sid).with_for_update().first()
         if call:
             if dial_status == "completed":
                 call.status = "completed"
@@ -728,8 +771,10 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
                 # M-08: only set ended_at if currently NULL (race with /call-status).
                 if not call.ended_at:
                     call.ended_at = _now()
-            elif dial_status in ("no-answer", "busy", "failed", "canceled"):
+            elif dial_status in ("no-answer", "busy", "failed"):
                 call.status = "missed"
+            elif dial_status == "canceled":
+                call.status = "canceled"
                 if not call.ended_at:
                     call.ended_at = _now()
             try:
@@ -769,15 +814,17 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     if not _claim_event(db, _texml_event_id("call-status", form_data), "call-status"):
         return _xml("<Response></Response>")
 
-    _TERMINAL = {"completed", "missed", "busy", "no-answer", "failed"}
-
-    call = db.query(Call).filter(Call.call_sid == call_sid).first()
+    # H-26: lock the row so concurrent webhook deliveries for the same call
+    # serialize here rather than racing through the terminal-state guard below.
+    call = db.query(Call).filter(Call.call_sid == call_sid).with_for_update().first()
     if call:
         # Only write status when: current is not terminal, OR new value is terminal.
         # This stops a late "ringing"/"in-progress" webhook from overwriting
         # a "completed" status that arrived first.
-        if call_status and (call.status not in _TERMINAL or call_status in _TERMINAL):
-            call.status = call_status
+        if call_status:
+            safe_status = _normalize_call_status(call_status)
+            if call.status not in _TERMINAL or safe_status in _TERMINAL:
+                call.status = safe_status
         # M-08: only update duration when the incoming value is greater so a
         # racing /post-dial cannot reset duration to 0 after this handler set it.
         if duration and duration > (call.duration_seconds or 0):
@@ -816,12 +863,13 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
         return _xml("<Response><Hangup/></Response>")
 
     if call_sid and recording_url:
-        call = db.query(Call).filter(Call.call_sid == call_sid).first()
+        # H-26: lock the row for the same reason as /post-dial and /call-status.
+        call = db.query(Call).filter(Call.call_sid == call_sid).with_for_update().first()
         if call:
             call.voicemail_url = _normalize_recording_url(recording_url)
             # Only downgrade to "missed" if the call never reached a terminal state.
             # Without this guard a completed (answered) call would be overwritten.
-            if call.status not in ("completed", "busy", "failed", "no-answer"):
+            if call.status not in _TERMINAL:
                 call.status = "missed"
             if not call.ended_at:
                 call.ended_at = _now()
@@ -999,12 +1047,27 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
         call_control_id, recording_id, recording_urls,
     )
 
+    # M-08: recording_id absence means we cannot later call GET /v2/recordings/{id}
+    # to mint a fresh signed URL. The pre-signed S3 link in recording_url expires
+    # ~10 minutes after delivery, so without recording_id the recording becomes
+    # permanently inaccessible shortly after this webhook fires.
+    # Known cause: TeXML-initiated recordings may omit recording_id in the payload.
+    # Log at WARNING so operators are alerted; include full payload for diagnostics.
+    if not recording_id:
+        log.warning(
+            "recording-event: call.recording.saved arrived WITHOUT recording_id "
+            "(call_control_id=%r). The pre-signed recording_url will expire in ~10 min "
+            "and cannot be refreshed. Full payload: %s",
+            call_control_id, payload,
+        )
+
     if not (call_control_id and recording_url):
         log.warning("recording-event: missing call_control_id or recording_url; ignoring")
         return Response(status_code=204)
 
     # Try exact match on call_sid first.
-    call = db.query(Call).filter(Call.call_sid == call_control_id).first()
+    # H-26: lock so a concurrent /call-status handler cannot race the recording write.
+    call = db.query(Call).filter(Call.call_sid == call_control_id).with_for_update().first()
 
     if not call:
         # Cross-tenant fallback removed: querying without owner_id would attach
@@ -1018,13 +1081,15 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
     call.recording_url = recording_url
     # Keep the stable recording_id so we can mint a fresh signed URL when the
     # pre-signed S3 link in recording_url expires (~10 minutes after delivery).
+    # If recording_id is absent the recording_url is our only reference; it will
+    # stop working once the pre-signed window closes (see warning above).
     if recording_id:
         call.recording_id = recording_id
     try:
         db.commit()
         log.info(
-            "Recording saved: Call.id=%s call_sid=%s recording_id=%s",
-            call.id, call.call_sid, recording_id,
+            "Recording saved: Call.id=%s call_sid=%s recording_id=%s durable=%s",
+            call.id, call.call_sid, recording_id, bool(recording_id),
         )
     except Exception:
         db.rollback()

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Component } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import api from './services/api';
 import { TelnyxProvider } from './context/TelnyxContext';
@@ -18,6 +18,7 @@ import MessagesPage from './pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -63,19 +64,29 @@ class ErrorBoundary extends Component {
 
 function UserLayout() {
   const [dialerOpen, setDialerOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       <Sidebar onOpenDialer={() => setDialerOpen(true)} />
       <main className="flex-1 flex flex-col overflow-hidden">
         <Routes>
-          <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/contacts" element={<ContactsPage />} />
-          <Route path="/messages" element={<MessagesPage />} />
-          <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
-          <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/inbox" replace />} />
+          {/* Layout route: one boundary per pathname — auto-resets on navigation */}
+          <Route
+            element={
+              <RouteErrorBoundary key={location.pathname}>
+                <Outlet />
+              </RouteErrorBoundary>
+            }
+          >
+            <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/contacts" element={<ContactsPage />} />
+            <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
+            <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/inbox" replace />} />
+          </Route>
         </Routes>
       </main>
       {dialerOpen && <Dialer onClose={() => setDialerOpen(false)} />}
@@ -87,21 +98,31 @@ function UserLayout() {
 
 function AdminLayout() {
   const [dialerOpen, setDialerOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       <Sidebar onOpenDialer={() => setDialerOpen(true)} />
       <main className="flex-1 flex flex-col overflow-hidden">
         <Routes>
-          <Route path="/analytics" element={<DashboardPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/contacts" element={<ContactsPage />} />
-          <Route path="/messages" element={<MessagesPage />} />
-          <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
-          <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/analytics" replace />} />
+          {/* Layout route: one boundary per pathname — auto-resets on navigation */}
+          <Route
+            element={
+              <RouteErrorBoundary key={location.pathname}>
+                <Outlet />
+              </RouteErrorBoundary>
+            }
+          >
+            <Route path="/analytics" element={<DashboardPage />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/contacts" element={<ContactsPage />} />
+            <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/messages/:phoneNumber" element={<MessagesPage />} />
+            <Route path="/scheduled" element={<ComingSoon title="Scheduled" />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/analytics" replace />} />
+          </Route>
         </Routes>
       </main>
       {dialerOpen && <Dialer onClose={() => setDialerOpen(false)} />}

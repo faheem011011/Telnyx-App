@@ -1,7 +1,8 @@
 """Database models."""
+import uuid
 from datetime import datetime, timezone
 from typing import Any
-from sqlalchemy import JSON, String, Integer, DateTime, ForeignKey, Text, Boolean, Index
+from sqlalchemy import JSON, String, Integer, DateTime, ForeignKey, Text, Boolean, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -9,6 +10,10 @@ from app.database import Base
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _new_voice_identity() -> str:
+    return str(uuid.uuid4())
 
 
 class User(Base):
@@ -20,12 +25,15 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    phone_number: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True, index=True)
     role: Mapped[str] = mapped_column(String(16), default="user", nullable=False)
     department: Mapped[str | None] = mapped_column(String(64), nullable=True)
     google_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    voice_identity: Mapped[str] = mapped_column(
+        String(36), unique=True, nullable=False, default=_new_voice_identity
+    )
     telnyx_credential_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     telnyx_sip_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
@@ -93,6 +101,10 @@ class Contact(Base):
     )
 
     owner: Mapped["User"] = relationship("User", back_populates="contacts")
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "phone_number", name="uq_contact_owner_phone"),
+    )
 
 
 class Call(Base):

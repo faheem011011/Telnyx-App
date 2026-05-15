@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Send, Phone, ArrowLeft, MessageCircle, Search } from 'lucide-react';
+import { Send, Phone, ArrowLeft, MessageCircle, Search, MailOpen } from 'lucide-react';
 import { messagesApi } from '../services/api';
 import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone, formatCallDate, toE164 } from '../utils/format';
@@ -39,8 +39,8 @@ export default function MessagesPage() {
     return () => clearInterval(id);
   }, [load]);
 
-  // When the user opens a thread, messages get marked read on the backend —
-  // refresh the conversation list immediately so the badge clears.
+  // When the user opens a thread, the ThreadView fires mark-read on the backend —
+  // refresh the conversation list shortly after so the unread badge clears.
   useEffect(() => {
     if (phoneNumber && phoneNumber !== 'new') {
       const t = setTimeout(() => load(false), 600);
@@ -250,6 +250,7 @@ function ThreadView({ phoneNumber, onSent }) {
   const [error, setError] = useState(null);
   const { makeCall } = useTelnyx();
   const bottomRef = useRef(null);
+  const navigate = useNavigate();
 
   const load = useCallback((showSpinner = false) => {
     if (showSpinner) setLoading(true);
@@ -260,9 +261,9 @@ function ThreadView({ phoneNumber, onSent }) {
           const optimistic = prev.filter((m) => typeof m.id === 'string' && m.id.startsWith('opt-'));
           const merged = [...next];
           for (const opt of optimistic) {
-            // Keep optimistic entries that haven't been confirmed yet
-            // (no matching body+direction in next)
-            const confirmed = next.some((m) => m.body === opt.body && m.direction === opt.direction);
+            // M-18: use client_id as the sole dedup key — body+direction matching
+            // would incorrectly drop one of two identical rapid messages.
+            const confirmed = next.some((m) => m.client_id && m.client_id === opt.client_id);
             if (!confirmed) merged.push(opt);
           }
           return merged.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -279,6 +280,12 @@ function ThreadView({ phoneNumber, onSent }) {
   }, [load]);
 
   useEffect(() => {
+    if (!phoneNumber) return;
+    messagesApi.markThreadRead(phoneNumber).catch(() => {});
+    window.dispatchEvent(new CustomEvent('calls:read'));
+  }, [phoneNumber]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
@@ -290,21 +297,25 @@ function ThreadView({ phoneNumber, onSent }) {
     setSending(true);
 
     // Optimistic update — show message immediately
+    // M-18: generate a UUID so the polling dedup can match by client_id, not body+direction.
+    const clientId = crypto.randomUUID();
     const optimisticId = `opt-${Date.now()}`;
     const optimistic = {
       id: optimisticId,
       direction: 'outbound',
       body: text,
       status: 'sending',
+      _optimistic: true,
+      client_id: clientId,
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimistic]);
     setBody('');
 
     try {
-      const sent = await messagesApi.send(phoneNumber, text);
-      // Replace optimistic entry with confirmed message from server
-      setMessages((prev) => prev.map((m) => (m.id === optimisticId ? sent : m)));
+      const sent = await messagesApi.send(phoneNumber, text, clientId);
+      // Replace optimistic entry with confirmed message from server (preserve client_id).
+      setMessages((prev) => prev.map((m) => (m.client_id === clientId ? { ...sent, client_id: clientId } : m)));
       onSent();
     } catch (err) {
       // Roll back optimistic entry and restore draft
@@ -320,8 +331,14 @@ function ThreadView({ phoneNumber, onSent }) {
     try {
       await makeCall(phoneNumber);
     } catch (e) {
-      alert(e.message);
+      setError(e.message || 'Call failed. Check the number and try again.');
     }
+  };
+
+  const handleMarkUnread = () => {
+    messagesApi.markThreadUnread(phoneNumber).catch(() => {});
+    window.dispatchEvent(new CustomEvent('calls:read'));
+    navigate('/messages');
   };
 
   return (
@@ -336,6 +353,13 @@ function ThreadView({ phoneNumber, onSent }) {
           <div className="font-medium text-sm truncate">{formatPhone(phoneNumber)}</div>
           <div className="text-xs text-muted">{messages.length} messages</div>
         </div>
+        <button
+          onClick={handleMarkUnread}
+          title="Mark as unread"
+          className="w-9 h-9 rounded-full surface-tertiary hover:bg-brand-500 hover:text-white flex items-center justify-center transition-colors"
+        >
+          <MailOpen className="w-4 h-4" />
+        </button>
         <button
           onClick={handleCall}
           className="w-9 h-9 rounded-full surface-tertiary hover:bg-green-500 hover:text-white flex items-center justify-center transition-colors"

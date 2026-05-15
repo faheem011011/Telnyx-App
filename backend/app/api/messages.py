@@ -53,6 +53,29 @@ def _from_number(user: User, db: Session) -> str:
     )
 
 
+def _thread_from_number(user: User, to_number: str, db: Session) -> str:
+    """Resolve the sending number that preserves an existing thread's identity.
+
+    Looks up the most recent outbound message from this user to *to_number*.
+    If one exists, reuses that message's from_number so the conversation stays
+    on the same sender.  Falls back to _from_number() when no prior thread is
+    found.
+    """
+    prior = (
+        db.query(Message)
+        .filter(
+            Message.owner_id == user.id,
+            Message.direction == "outbound",
+            Message.to_number == to_number,
+        )
+        .order_by(desc(Message.created_at))
+        .first()
+    )
+    if prior:
+        return prior.from_number
+    return _from_number(user, db)
+
+
 @router.get("/conversations")
 def list_conversations(
     limit: int = Query(50, ge=1, le=200),
@@ -150,7 +173,17 @@ def get_thread(
         ),
     ).order_by(Message.created_at.asc()).offset(offset).limit(limit).all()
 
-    # Mark inbound messages as read
+    return messages
+
+
+@router.post("/thread/{phone_number}/mark-read", status_code=status.HTTP_204_NO_CONTENT)
+def mark_thread_read(
+    phone_number: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Explicitly mark all inbound messages in a thread as read."""
+    phone_number = _normalize_phone(phone_number)
     db.query(Message).filter(
         Message.owner_id == current_user.id,
         Message.direction == "inbound",
@@ -159,7 +192,22 @@ def get_thread(
     ).update({"is_read": True})
     db.commit()
 
-    return messages
+
+@router.patch("/thread/{phone_number}/mark-unread", status_code=status.HTTP_204_NO_CONTENT)
+def mark_thread_unread(
+    phone_number: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark all inbound messages in a thread as unread."""
+    phone_number = _normalize_phone(phone_number)
+    db.query(Message).filter(
+        Message.owner_id == current_user.id,
+        Message.direction == "inbound",
+        Message.from_number == phone_number,
+        Message.is_read.is_(True),
+    ).update({"is_read": False})
+    db.commit()
 
 
 @router.post("/send", response_model=MessageOut, status_code=status.HTTP_201_CREATED)
@@ -170,7 +218,7 @@ def send_message(
 ):
     """Send an SMS message from the user's assigned Telnyx number."""
     payload.to_number = _normalize_phone(payload.to_number)
-    from_num = _from_number(current_user, db)
+    from_num = _thread_from_number(current_user, payload.to_number, db)
     try:
         result = send_sms(payload.to_number, payload.body, from_num)
     except ValueError as e:
@@ -193,7 +241,10 @@ def send_message(
     db.add(msg)
     db.commit()
     db.refresh(msg)
-    return msg
+    # M-18: echo client_id back so the frontend can dedup by UUID, not body+direction.
+    # client_id is never written to the DB — model_copy injects it only in the response.
+    out = MessageOut.model_validate(msg)
+    return out.model_copy(update={"client_id": payload.client_id})
 
 
 @router.delete("/thread/{phone_number}", status_code=status.HTTP_204_NO_CONTENT)

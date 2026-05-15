@@ -5,7 +5,7 @@ import secrets
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -154,10 +154,14 @@ _SETUP_GONE = HTTPException(
 )
 
 
+def _admin_exists(db: Session) -> bool:
+    return db.query(User).filter(User.role == "admin").first() is not None
+
+
 @router.get("/setup", status_code=status.HTTP_200_OK)
 def check_setup(db: Session = Depends(get_db)) -> dict:
-    """Return 200 if setup is available (no users exist), 410 if already done."""
-    if db.query(User).first():
+    """Return 200 if setup is available (no admin exists), 410 if already done."""
+    if _admin_exists(db):
         raise _SETUP_GONE
     return {"available": True}
 
@@ -167,11 +171,12 @@ def check_setup(db: Session = Depends(get_db)) -> dict:
 def setup(
     request: Request,
     payload: SetupRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     x_setup_token: str | None = Header(default=None, alias="X-Setup-Token"),
 ) -> UserOut:
-    """Create the first admin account. Permanently disabled once any user exists."""
-    if db.query(User).first():
+    """Create the first admin account. Permanently disabled once any admin exists."""
+    if _admin_exists(db):
         raise _SETUP_GONE
 
     # Gate the bootstrap endpoint behind a deployment-time secret so an
@@ -179,7 +184,10 @@ def setup(
     if not settings.initial_setup_token:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Initial setup not enabled",
+            detail=(
+                "INITIAL_SETUP_TOKEN is not configured. "
+                "Set this environment variable to enable initial setup."
+            ),
         )
 
     if not x_setup_token or not secrets.compare_digest(x_setup_token, settings.initial_setup_token):
@@ -208,11 +216,7 @@ def setup(
     db.refresh(admin)
 
     verify_url = make_verification_url(raw_token)
-    try:
-        send_verification_email(admin.email, verify_url)
-    except Exception:
-        # M-10: best-effort send — log but never block setup on email failure.
-        log.exception("Failed to send setup verification email to %s", admin.email)
+    background_tasks.add_task(send_verification_email, admin.email, verify_url)
 
     return UserOut.model_validate(admin)
 
@@ -220,7 +224,7 @@ def setup(
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("3/hour")
 def forgot_password(
-    request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)
+    request: Request, payload: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ) -> None:
     """Request a password reset email. Always returns 204 to prevent email enumeration."""
     user = db.query(User).filter(
@@ -254,12 +258,7 @@ def forgot_password(
     db.commit()
 
     reset_url = f"{settings.frontend_url}/reset-password?token={raw_token}"
-    try:
-        send_password_reset_email(user.email, reset_url)
-    except Exception:
-        # M-10: best-effort send — log but never expose failures to the caller
-        # (preserves the no-email-enumeration property of forgot-password).
-        log.exception("Failed to send password reset email to %s", user.email)
+    background_tasks.add_task(send_password_reset_email, user.email, reset_url)
 
 
 @router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)

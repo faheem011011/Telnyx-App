@@ -2,7 +2,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
@@ -316,6 +316,9 @@ def get_analytics(
 
     if current_user.role == "admin":
         if user_id:
+            target_user = db.query(User).filter(User.id == user_id).first()
+            if not target_user:
+                raise HTTPException(status_code=404, detail="User not found.")
             target_ids = [user_id]
         elif department:
             dept_users = db.query(User.id).filter(
@@ -510,6 +513,10 @@ def get_users_summary(
 ):
     """Per-user metric rows used for CSV export (admin only)."""
     period_start, period_end = _get_window(period, start, end, utc_offset)
+
+    if user_id:
+        if not db.query(User.id).filter(User.id == user_id).first():
+            raise HTTPException(status_code=404, detail="User not found.")
 
     user_q = db.query(User).filter(User.is_active.is_(True))
     if user_id:
