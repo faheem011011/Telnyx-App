@@ -1,15 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, Phone, Plus, Search, Trash2, Edit2, X, Check,
   RefreshCw, UserCheck, PhoneCall, Shield, UserCircle,
   Building2, ChevronDown, Loader2, AlertCircle, MailCheck,
-  Eye, EyeOff,
+  Eye, EyeOff, ClipboardList, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { adminApi } from '../services/api';
+import { useDepartments } from '../hooks/useDepartments';
 import Avatar from '../components/Avatar';
 import { formatPhone } from '../utils/format';
-
-const DEPARTMENTS = ['', 'Data Team', 'HR Team', 'BD Team', 'AI/ML Team', 'DevOps Team'];
 const ROLES = ['user', 'admin'];
 // Must match backend UserAdminCreate.password Field min_length — keep in sync.
 const MIN_PASSWORD_LENGTH = 12;
@@ -130,7 +129,7 @@ function PasswordInputWithToggle({ id, required, placeholder, value, onChange, v
 
 // ─── UserForm — defined at module level to avoid focus-loss on every render ───
 
-function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmit, submitLabel, isEdit = false }) {
+function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmit, submitLabel, isEdit = false, departments = [] }) {
   const [showPassword, setShowPassword] = useState(false);
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -217,7 +216,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
           onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
         >
           <option value="">Select department…</option>
-          {DEPARTMENTS.slice(1).map((d) => (
+          {departments.map((d) => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
@@ -253,6 +252,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
 // ─── Users Tab ────────────────────────────────────────────────────────────────
 
 function UsersTab({ users, loading, onRefresh }) {
+  const { departments } = useDepartments();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -382,7 +382,7 @@ function UsersTab({ users, loading, onRefresh }) {
       )}
       {/* Department filter tabs */}
       <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-        {['', ...DEPARTMENTS.slice(1)].map((d) => (
+        {['', ...departments].map((d) => (
           <button
             key={d}
             onClick={() => setDeptFilter(d)}
@@ -542,6 +542,7 @@ function UsersTab({ users, loading, onRefresh }) {
             onCancel={cancelForm}
             onSubmit={handleCreate}
             submitLabel="Create User"
+            departments={departments}
           />
         </Modal>
       )}
@@ -557,6 +558,7 @@ function UsersTab({ users, loading, onRefresh }) {
             onSubmit={handleUpdate}
             submitLabel="Save Changes"
             isEdit
+            departments={departments}
           />
         </Modal>
       )}
@@ -564,7 +566,7 @@ function UsersTab({ users, loading, onRefresh }) {
       {deleteUser && (
         <Modal title="Delete User" onClose={() => setDeleteUser(null)}>
           <p className="text-sm text-muted mb-5">
-            Are you sure you want to delete <strong>{deleteUser.name}</strong>? This will permanently remove their account and all associated data.
+            This will deactivate <strong>{deleteUser.name}</strong>'s account and prevent them from signing in. Their call history and data are retained and remain visible in audit logs.
           </p>
           {actionError && (
             <div className="mb-4 px-3 py-2.5 rounded-lg text-sm bg-red-500/10 text-red-500 border border-red-500/20">
@@ -840,7 +842,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
                         }}
                       >
                         <option value="">Unassigned</option>
-                        {(users || []).filter(u => u.role === 'user').map((u) => (
+                        {(users || []).map((u) => (
                           <option key={u.id} value={u.id}>{u.name}</option>
                         ))}
                       </select>
@@ -865,6 +867,222 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── AuditLogsTab ────────────────────────────────────────────────────────────
+
+const AUDIT_ACTIONS = [
+  'user.create', 'user.update', 'user.delete', 'user.resend_verification',
+  'number.sync', 'number.purchase', 'number.assign', 'number.unassign', 'number.release',
+];
+
+const ACTION_COLORS = {
+  'user.create':              { bg: 'bg-green-500/10',  text: 'text-green-600' },
+  'user.update':              { bg: 'bg-blue-500/10',   text: 'text-blue-600'  },
+  'user.delete':              { bg: 'bg-red-500/10',    text: 'text-red-500'   },
+  'user.resend_verification': { bg: 'bg-amber-500/10',  text: 'text-amber-600' },
+  'number.sync':              { bg: 'bg-purple-500/10', text: 'text-purple-600'},
+  'number.purchase':          { bg: 'bg-teal-500/10',   text: 'text-teal-600'  },
+  'number.assign':            { bg: 'bg-indigo-500/10', text: 'text-indigo-600'},
+  'number.unassign':          { bg: 'bg-orange-500/10', text: 'text-orange-600'},
+  'number.release':           { bg: 'bg-red-500/10',    text: 'text-red-500'   },
+};
+
+function ActionBadge({ action }) {
+  const c = ACTION_COLORS[action] || { bg: 'bg-zinc-100', text: 'text-zinc-600' };
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${c.bg} ${c.text}`}>
+      {action}
+    </span>
+  );
+}
+
+const PAGE_SIZE = 25;
+
+function AuditLogsTab() {
+  const [logs, setLogs]           = useState([]);
+  const [total, setTotal]         = useState(0);
+  const [page, setPage]           = useState(0);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
+  const [actionFilter, setAction] = useState('');
+  const [emailFilter, setEmail]   = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const debounceRef = useRef(null);
+
+  const fetch = useCallback(async (pg, action, email) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = { limit: PAGE_SIZE, skip: pg * PAGE_SIZE };
+      if (action) params.action = action;
+      if (email)  params.actor_email = email;
+      const data = await adminApi.listAuditLogs(params);
+      setLogs(data.items);
+      setTotal(data.total);
+    } catch {
+      setError('Failed to load audit logs.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch(page, actionFilter, emailFilter);
+  }, [fetch, page, actionFilter, emailFilter]);
+
+  const handleActionChange = (e) => {
+    setAction(e.target.value);
+    setPage(0);
+  };
+
+  const handleEmailInput = (e) => {
+    const val = e.target.value;
+    setEmailInput(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setEmailFilter(val.trim());
+      setPage(0);
+    }, 400);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const to   = Math.min(page * PAGE_SIZE + PAGE_SIZE, total);
+
+  return (
+    <div>
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
+          <input
+            className="input pl-9 w-56"
+            placeholder="Filter by actor email…"
+            value={emailInput}
+            onChange={handleEmailInput}
+          />
+        </div>
+        <select className="input w-52" value={actionFilter} onChange={handleActionChange}>
+          <option value="">All actions</option>
+          {AUDIT_ACTIONS.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => { setAction(''); setEmail(''); setEmailInput(''); setPage(0); }}
+          className="btn-ghost text-sm px-3 py-2"
+          disabled={!actionFilter && !emailFilter}
+        >
+          <X className="w-3.5 h-3.5" /> Clear
+        </button>
+        <span className="ml-auto text-xs text-muted">
+          {total > 0 ? `${from}–${to} of ${total.toLocaleString()}` : '0 entries'}
+        </span>
+      </div>
+
+      {error && (
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm bg-red-500/10 text-red-500 border border-red-500/20 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-muted" />
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="text-center py-16 text-sm text-muted">No audit log entries match your filters.</div>
+      ) : (
+        <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgb(var(--border-primary))' }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ background: 'rgb(var(--bg-tertiary))' }}>
+                {['Timestamp', 'Actor', 'Action', 'Resource', 'IP'].map((h) => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wide whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((entry) => (
+                <AuditRow key={entry.id} entry={entry} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      <div className="flex items-center justify-end gap-2 mt-4">
+        <button
+          onClick={() => setPage((p) => p - 1)}
+          disabled={page === 0}
+          className="p-1.5 rounded-lg hover:surface-tertiary transition-colors text-muted disabled:opacity-30"
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-xs text-muted px-1">Page {page + 1} / {totalPages}</span>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          disabled={page >= totalPages - 1}
+          className="p-1.5 rounded-lg hover:surface-tertiary transition-colors text-muted disabled:opacity-30"
+          aria-label="Next page"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AuditRow({ entry }) {
+  const [expanded, setExpanded] = useState(false);
+  const ts = new Date(entry.created_at);
+  const dateStr = ts.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const timeStr = ts.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  return (
+    <>
+      <tr
+        className="border-t transition-colors hover:surface-secondary cursor-pointer"
+        style={{ borderColor: 'rgb(var(--border-primary))' }}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <td className="px-4 py-3 whitespace-nowrap">
+          <div className="text-xs font-medium">{dateStr}</div>
+          <div className="text-[11px] text-muted">{timeStr}</div>
+        </td>
+        <td className="px-4 py-3">
+          <div className="text-xs font-medium truncate max-w-[160px]">{entry.actor_email}</div>
+          {entry.actor_id && (
+            <div className="text-[11px] text-muted">id:{entry.actor_id}</div>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          <ActionBadge action={entry.action} />
+        </td>
+        <td className="px-4 py-3">
+          <div className="text-xs text-muted">{entry.resource_type}</div>
+          {entry.resource_id && (
+            <div className="text-[11px] text-muted font-mono truncate max-w-[120px]">{entry.resource_id}</div>
+          )}
+        </td>
+        <td className="px-4 py-3 text-[11px] text-muted font-mono">{entry.ip_address || '—'}</td>
+      </tr>
+      {expanded && entry.detail && (
+        <tr style={{ borderColor: 'rgb(var(--border-primary))' }} className="border-t">
+          <td colSpan={5} className="px-4 py-3" style={{ background: 'rgb(var(--bg-secondary))' }}>
+            <pre className="text-[11px] text-muted overflow-x-auto whitespace-pre-wrap break-words">
+              {JSON.stringify(entry.detail, null, 2)}
+            </pre>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -894,8 +1112,9 @@ export default function AdminPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const TABS = [
-    { id: 'users',   label: 'Users',         Icon: Users,  count: users.length },
-    { id: 'numbers', label: 'Phone Numbers',  Icon: Phone,  count: numbers.length },
+    { id: 'users',   label: 'Users',         Icon: Users,         count: users.length },
+    { id: 'numbers', label: 'Phone Numbers',  Icon: Phone,         count: numbers.length },
+    { id: 'audit',   label: 'Audit Logs',     Icon: ClipboardList, count: null },
   ];
 
   return (
@@ -922,15 +1141,17 @@ export default function AdminPage() {
             >
               <Icon className="w-4 h-4" />
               {label}
-              <span
-                className="px-1.5 py-0.5 rounded-full text-[11px] font-semibold"
-                style={{
-                  background: tab === id ? 'rgba(7,67,140,0.12)' : 'rgba(255,255,255,0.2)',
-                  color: tab === id ? '#07438C' : 'rgba(255,255,255,0.9)',
-                }}
-              >
-                {count}
-              </span>
+              {count !== null && (
+                <span
+                  className="px-1.5 py-0.5 rounded-full text-[11px] font-semibold"
+                  style={{
+                    background: tab === id ? 'rgba(7,67,140,0.12)' : 'rgba(255,255,255,0.2)',
+                    color: tab === id ? '#07438C' : 'rgba(255,255,255,0.9)',
+                  }}
+                >
+                  {count}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -950,6 +1171,9 @@ export default function AdminPage() {
         )}
         {tab === 'numbers' && (
           <NumbersTab numbers={numbers} users={users} loading={loading} onRefresh={loadData} />
+        )}
+        {tab === 'audit' && (
+          <AuditLogsTab />
         )}
       </div>
     </div>

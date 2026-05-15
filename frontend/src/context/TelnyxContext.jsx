@@ -214,11 +214,20 @@ export function TelnyxProvider({ children }) {
 
     const scheduleRefresh = (token) => {
       clearTimeout(refreshTimerRef.current);
-      let delay = 23 * 60 * 60 * 1_000;
+      // Safe fallback: refresh in 15 min if we cannot read the token's exp.
+      // 23 h was dangerously long given Telnyx tokens expire in ~3 h.
+      const FALLBACK_MS = 15 * 60 * 1_000;
+      let delay = FALLBACK_MS;
       try {
-        const { exp } = JSON.parse(atob(token.split('.')[1]));
+        // JWTs use base64url (- and _ instead of + and /, no padding).
+        // atob() requires standard base64 with padding — normalise first.
+        const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+        const { exp } = JSON.parse(atob(padded));
         if (exp) delay = Math.max(60_000, exp * 1_000 - Date.now() - 5 * 60 * 1_000);
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Telnyx] Failed to decode token payload; will refresh in 15 min', err);
+      }
 
       // When the timer fires, wait until no call is active before refreshing.
       // Refreshing mid-call runs cleanup → client.disconnect() → call drops.
@@ -394,22 +403,47 @@ export function TelnyxProvider({ children }) {
     if (activeCallRef.current) {
       throw new Error('A call is already in progress.');
     }
+
     // Open the mic ourselves and hold onto the stream so we can guarantee it
     // gets stopped on terminal state. The SDK opens its own internal stream
     // but does not always release it on failed setups, leaving the browser's
     // microphone indicator stuck until reload.
     try {
       micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (_) {
-      throw new Error('Microphone access denied. Allow microphone access in your browser and try again.');
+    } catch (err) {
+      const name = err?.name;
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        throw new Error('Microphone access denied. Allow microphone access in your browser and try again.');
+      }
+      if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        throw new Error('No microphone found. Connect a microphone and try again.');
+      }
+      if (name === 'NotReadableError' || name === 'TrackStartError') {
+        throw new Error('Microphone is in use by another application. Close it and try again.');
+      }
+      throw new Error('Could not access microphone. Check browser permissions and try again.');
     }
 
-    const call = clientRef.current.newCall({
-      destinationNumber: toNumber,
-      callerNumber: user?.phone_number || '',
-      remoteElement: audioRef.current || undefined,
-    });
+    // C-06: wrap newCall() so a SDK/network failure does not leak the mic stream.
+    // If newCall() throws, no SDK terminal event ever fires, so the callbacks that
+    // normally release media never run — we must clean up explicitly here.
+    let call;
+    try {
+      call = clientRef.current.newCall({
+        destinationNumber: toNumber,
+        callerNumber: user?.phone_number || '',
+        remoteElement: audioRef.current || undefined,
+      });
+    } catch (err) {
+      console.error('[Telnyx] newCall() failed — releasing mic and resetting state', err);
+      releaseLocalMedia(null);
+      micStreamRef.current = null;
+      clearCallState();
+      throw new Error('Failed to initiate call. Please try again.');
+    }
 
+    // Assign refs and state only after successful call creation to avoid
+    // ghost active-call UI if newCall() had thrown above.
     activeCallRef.current   = call;
     wasConnectedRef.current = false;
     userHangupRef.current   = false;
@@ -432,7 +466,7 @@ export function TelnyxProvider({ children }) {
     });
     setMuted(false);
     return call;
-  }, [deviceReady, user]);
+  }, [deviceReady, user, releaseLocalMedia, clearCallState]);
 
   const acceptIncoming = useCallback(() => {
     if (!incomingCall) return;

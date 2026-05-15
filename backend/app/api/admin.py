@@ -12,6 +12,7 @@ from app.services.email import send_verification_email
 from app.services.verification import issue_verification_token, make_verification_url
 from app.schemas import (
     AuditLogOut,
+    DEPARTMENTS,
     NumberAssignRequest,
     NumberPurchaseRequest,
     NumberSearchResult,
@@ -37,6 +38,15 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 # ============================================================
+# Departments
+# ============================================================
+
+@router.get("/departments", response_model=list[str])
+def list_departments(_: User = Depends(require_admin)) -> list[str]:
+    return list(DEPARTMENTS)
+
+
+# ============================================================
 # User management
 # ============================================================
 
@@ -47,7 +57,14 @@ def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[UserWithNumbersOut]:
-    users = db.query(User).order_by(User.created_at.asc()).offset(offset).limit(limit).all()
+    users = (
+        db.query(User)
+        .filter(User.deleted_at.is_(None))
+        .order_by(User.created_at.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [UserWithNumbersOut.model_validate(u) for u in users]
 
 
@@ -60,10 +77,16 @@ def create_user(
 ) -> UserWithNumbersOut:
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
-        )
+        if existing.deleted_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists",
+            )
+        # H-12: soft-deleted account occupies the unique email slot.
+        # Tombstone its email so the constraint doesn't block re-registration.
+        # The old row is preserved for audit purposes with a non-reusable address.
+        existing.email = f"__deleted_{existing.id}__{existing.email}"
+        db.flush()
 
     user = User(
         email=payload.email,
@@ -411,11 +434,14 @@ def assign_number(
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
 ) -> PhoneNumberOut:
-    tn = db.query(PhoneNumber).filter(PhoneNumber.id == number_id).first()
+    # H-14: acquire a row-level lock before reading assigned_to_user_id so two
+    # concurrent assign requests serialize here rather than both seeing the
+    # pre-assignment state and letting the last writer silently win.
+    tn = db.query(PhoneNumber).filter(PhoneNumber.id == number_id).with_for_update().first()
     if not tn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Number not found")
 
-    user = db.query(User).filter(User.id == payload.user_id).first()
+    user = db.query(User).filter(User.id == payload.user_id).with_for_update().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -475,19 +501,34 @@ def unassign_number(
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin),
 ) -> PhoneNumberOut:
-    tn = db.query(PhoneNumber).filter(PhoneNumber.id == number_id).first()
+    # H-14: lock so concurrent assign/unassign requests on the same number serialize.
+    tn = db.query(PhoneNumber).filter(PhoneNumber.id == number_id).with_for_update().first()
     if not tn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Number not found")
 
     previous_user_id = tn.assigned_to_user_id
     tn.assigned_to_user_id = None
 
+    # C-08: also clear the legacy User.phone_number field for every user that
+    # still holds this number. Without this, the User.phone_number fallback in
+    # _resolve_user_by_to_number() would continue routing inbound calls/SMS to
+    # the former assignee even after the admin believes access is revoked.
+    cleared_user_ids: list[int] = []
+    stale_users = db.query(User).filter(User.phone_number == tn.phone_number).all()
+    for stale in stale_users:
+        stale.phone_number = None
+        cleared_user_ids.append(stale.id)
+
+    audit_detail: dict = {"previous_user_id": previous_user_id}
+    if cleared_user_ids:
+        audit_detail["cleared_user_ids"] = cleared_user_ids
+
     log_audit(
         db, current_admin,
         action="number.unassign",
         resource_type="number",
         resource_id=tn.phone_number,
-        detail={"previous_user_id": previous_user_id},
+        detail=audit_detail,
         ip_address=get_client_ip(request),
     )
     db.commit()
@@ -548,7 +589,8 @@ def delete_number(
 def list_audit_logs(
     action: str | None = Query(None, description="Filter by action, e.g. user.create"),
     resource_type: str | None = Query(None),
-    limit: int = Query(100, le=500),
+    actor_email: str | None = Query(None, description="Partial match on actor email"),
+    limit: int = Query(50, le=200),
     skip: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
@@ -558,6 +600,8 @@ def list_audit_logs(
         q = q.filter(AuditLog.action == action)
     if resource_type:
         q = q.filter(AuditLog.resource_type == resource_type)
+    if actor_email:
+        q = q.filter(AuditLog.actor_email.ilike(f"%{actor_email}%"))
     total = q.count()
     logs = q.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
     return {

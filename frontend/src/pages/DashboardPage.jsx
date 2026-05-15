@@ -11,11 +11,10 @@ import {
   Mic, PhoneOff, MailOpen, MapPin,
 } from 'lucide-react';
 import { analyticsApi, adminApi } from '../services/api';
+import { useDepartments } from '../hooks/useDepartments';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
-
-const DEPARTMENTS = ['Data Team', 'HR Team', 'BD Team', 'AI/ML Team', 'DevOps Team'];
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -636,6 +635,7 @@ export default function DashboardPage() {
   const { user }  = useAuth();
   const colors    = useChartColors(theme);
   const isAdmin   = user?.role === 'admin';
+  const { departments } = useDepartments();
 
   const [range,        setRange]        = useState('7d');
   const [customStart,  setCustomStart]  = useState('');
@@ -919,7 +919,7 @@ export default function DashboardPage() {
                   reads as gradient-blue while open, then snaps back to white
                   once an item is picked because the parent `<select>` color wins. */}
                 <option value="" style={{ color: '#07438C', background: '#fff' }}>All Departments</option>
-                {DEPARTMENTS.map((d) => (
+                {departments.map((d) => (
                   <option key={d} value={d} style={{ color: '#07438C', background: '#fff' }}>{d}</option>
                 ))}
               </select>

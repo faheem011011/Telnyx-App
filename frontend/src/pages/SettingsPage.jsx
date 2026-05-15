@@ -6,9 +6,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTelnyx } from '../context/TelnyxContext';
 import { adminApi, authApi } from '../services/api';
+import { useDepartments } from '../hooks/useDepartments';
 import { formatPhone } from '../utils/format';
-
-const DEPARTMENTS = ['Data Team', 'HR Team', 'BD Team', 'AI/ML Team', 'DevOps Team'];
 // Must match backend ChangePasswordRequest.new_password Field min_length.
 const MIN_PASSWORD_LENGTH = 12;
 
@@ -105,6 +104,7 @@ export default function SettingsPage() {
 
 // ─── Admin self-editor: change own department ───────────────────────────────
 function DepartmentEditor({ user, onSaved }) {
+  const { departments } = useDepartments();
   const [value, setValue] = useState(user?.department || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -138,7 +138,7 @@ function DepartmentEditor({ user, onSaved }) {
             disabled={saving}
           >
             <option value="" disabled>Select a team</option>
-            {DEPARTMENTS.map((d) => (
+            {departments.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>

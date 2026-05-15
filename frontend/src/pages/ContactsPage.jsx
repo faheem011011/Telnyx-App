@@ -14,6 +14,8 @@ export default function ContactsPage() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // contact being edited (or {} for new)
+  const [pageError, setPageError] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const { makeCall } = useTelnyx();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
@@ -41,7 +43,7 @@ export default function ContactsPage() {
     try {
       await makeCall(toE164(contact.phone_number));
     } catch (e) {
-      alert(e.message || 'Call failed');
+      setPageError(e.message || 'Call failed');
     }
   };
 
@@ -49,13 +51,18 @@ export default function ContactsPage() {
     navigate(`/messages/${encodeURIComponent(contact.phone_number)}`);
   };
 
-  const handleDelete = async (contact) => {
-    if (!confirm(`Delete ${contact.name}?`)) return;
+  const handleDelete = (contact) => {
+    setDeleteTarget(contact);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
-      await contactsApi.remove(contact.id);
+      await contactsApi.remove(deleteTarget.id);
       load();
     } catch {
-      alert('Failed to delete contact. Please try again.');
+      setPageError('Failed to delete contact.');
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -64,7 +71,7 @@ export default function ContactsPage() {
       await contactsApi.update(contact.id, { is_favorite: !contact.is_favorite });
       load();
     } catch {
-      alert('Failed to update contact. Please try again.');
+      setPageError('Failed to update contact.');
     }
   };
 
@@ -106,6 +113,15 @@ export default function ContactsPage() {
           </button>
         </div>
       </div>
+
+      {pageError && (
+        <div className="mx-6 mt-3 px-4 py-2 rounded-lg text-sm bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-between">
+          <span>{pageError}</span>
+          <button onClick={() => setPageError(null)} className="ml-2 hover:opacity-70">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
@@ -203,6 +219,15 @@ export default function ContactsPage() {
             setEditing(null);
             load();
           }}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete contact"
+          message={`Delete ${deleteTarget.name}? This cannot be undone.`}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>
@@ -362,6 +387,42 @@ function Field({ label, required, children }) {
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+function ConfirmDialog({ title, message, onConfirm, onCancel }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in"
+      style={{ background: 'rgb(0 0 0 / 0.6)' }}
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm mx-4 rounded-2xl p-5 animate-slide-up"
+        style={{
+          background: 'rgb(var(--bg-primary))',
+          border: '1px solid rgb(var(--border-primary))',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-display font-bold mb-2">{title}</h2>
+        <p className="text-sm text-muted mb-5">{message}</p>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="btn-ghost surface-tertiary flex-1 py-2 text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2 text-sm rounded-xl font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

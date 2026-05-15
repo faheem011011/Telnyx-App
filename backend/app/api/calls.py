@@ -24,8 +24,8 @@ router = APIRouter(prefix="/api/calls", tags=["calls"])
 
 
 def client_identity_for_user(user: User) -> str:
-    """SIP username identity for this user (used by Telnyx WebRTC)."""
-    return f"user_{user.id}"
+    """Opaque SIP identity for this user (used by Telnyx WebRTC)."""
+    return user.voice_identity
 
 
 def _attach_contacts(calls: list, db: Session, user_id: int, is_admin: bool = False) -> list[dict]:
@@ -341,11 +341,28 @@ def get_recording_url(
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
     if not call.recording_id:
-        # Fall back to whatever URL we have on file — it may still be within
-        # the original 10-minute window (e.g. the user just hung up).
-        if call.recording_url:
-            return {"url": call.recording_url}
-        raise HTTPException(status_code=404, detail="No recording for this call")
+        # M-08: no recording_id means the call.recording.saved webhook arrived
+        # without one (known to happen with TeXML-initiated recordings). We have
+        # no way to re-mint a fresh signed URL via GET /v2/recordings/{id}.
+        # The pre-signed S3 URL in recording_url expires ~10 min after the
+        # webhook fired, so serving it beyond that window will produce a 403 on
+        # the client side.  Return 410 Gone rather than silently handing back a
+        # URL that is very likely already expired, so the frontend can show a
+        # clear "no longer available" message instead of a silent playback failure.
+        if not call.recording_url:
+            raise HTTPException(status_code=404, detail="No recording for this call")
+        log.warning(
+            "get_recording_url: call.id=%s has recording_url but no recording_id "
+            "(pre-signed URL may be expired; cannot refresh without recording_id)",
+            call_id,
+        )
+        raise HTTPException(
+            status_code=410,
+            detail=(
+                "Recording is no longer available. "
+                "It was captured without a durable identifier and the temporary link has expired."
+            ),
+        )
 
     url = fetch_recording_url(call.recording_id)
     if not url:

@@ -305,11 +305,13 @@ class MessageOut(BaseModel):
     media_url: str | None
     is_read: bool
     created_at: datetime
+    client_id: str | None = None          # M-18: echo-only dedup key, never persisted
 
 
 class MessageCreate(BaseModel):
     to_number: str = Field(..., min_length=1, max_length=32)
     body: str = Field(..., min_length=1)
+    client_id: str | None = None          # M-18: client-generated UUID for optimistic dedup
 
 
 class ConversationOut(BaseModel):

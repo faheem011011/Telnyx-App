@@ -106,10 +106,14 @@ export const messagesApi = {
   conversations: () => api.get('/api/messages/conversations').then((r) => r.data),
   thread: (phoneNumber) =>
     api.get(`/api/messages/thread/${encodeURIComponent(phoneNumber)}`).then((r) => r.data),
-  send: (toNumber, body) =>
-    api.post('/api/messages/send', { to_number: toNumber, body }).then((r) => r.data),
+  send: (toNumber, body, clientId) =>
+    api.post('/api/messages/send', { to_number: toNumber, body, client_id: clientId }).then((r) => r.data),
   deleteThread: (phoneNumber) =>
     api.delete(`/api/messages/thread/${encodeURIComponent(phoneNumber)}`).then((r) => r.data),
+  markThreadRead: (phoneNumber) =>
+    api.post(`/api/messages/thread/${encodeURIComponent(phoneNumber)}/mark-read`),
+  markThreadUnread: (phoneNumber) =>
+    api.patch(`/api/messages/thread/${encodeURIComponent(phoneNumber)}/mark-unread`),
 };
 
 // ============================================================
@@ -129,6 +133,12 @@ export const analyticsApi = {
 // Admin
 // ============================================================
 export const adminApi = {
+  // Departments
+  listDepartments: () => api.get('/api/admin/departments').then((r) => r.data),
+
+  // Audit logs
+  listAuditLogs: (params = {}) => api.get('/api/admin/audit-logs', { params }).then((r) => r.data),
+
   // Users
   listUsers: () => api.get('/api/admin/users').then((r) => r.data),
   createUser: (data) => api.post('/api/admin/users', data).then((r) => r.data),

@@ -14,7 +14,6 @@ import {
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTelnyx } from '../context/TelnyxContext';
-import { callsApi } from '../services/api';
 import Avatar from './Avatar';
 import { formatPhone } from '../utils/format';
 
@@ -35,28 +34,14 @@ const ADMIN_NAV = [
 ];
 
 export default function Sidebar({ onOpenDialer }) {
-  const { user, logout } = useAuth();
+  const { user, logout, unreadCount } = useAuth();
   const navigate = useNavigate();
-  const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
   const { deviceReady, deviceError } = useTelnyx();
   const isAdmin = user?.role === 'admin';
   const navItems = isAdmin ? ADMIN_NAV : USER_NAV;
-
-  // Fetch unread count
-  useEffect(() => {
-    const fetchUnread = () =>
-      callsApi.unreadCount().then((r) => setUnread(r.count)).catch(() => {});
-    fetchUnread();
-    const id = setInterval(fetchUnread, 15000);
-    window.addEventListener('calls:read', fetchUnread);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener('calls:read', fetchUnread);
-    };
-  }, [isAdmin]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -120,10 +105,10 @@ export default function Sidebar({ onOpenDialer }) {
           <NavLink key={to} to={to} className={navLinkClass} style={navLinkStyle}>
             <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
             <span className="flex-1 truncate">{label}</span>
-            {showBadge && unread > 0 && (
+            {showBadge && unreadCount > 0 && (
               <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
                 style={{ background: 'rgba(255,255,255,0.95)', color: '#07438C' }}>
-                {unread > 99 ? '99+' : unread}
+                {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
             {comingSoon && (

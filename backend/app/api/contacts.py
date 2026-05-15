@@ -92,6 +92,25 @@ def create_contact(
     # L-05: pin field list explicitly so future ContactCreate additions don't
     # silently set fields that the create endpoint shouldn't accept (e.g. is_blocked).
     data = payload.model_dump()
+
+    # L-32: reject duplicate phone numbers per user
+    existing = (
+        db.query(Contact)
+        .filter(
+            Contact.owner_id == current_user.id,
+            Contact.phone_number == data["phone_number"],
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"You already have a contact with this phone number ({existing.name}). "
+                "Please enter a different number."
+            ),
+        )
+
     contact = Contact(
         owner_id=current_user.id,
         name=data["name"],
@@ -128,7 +147,29 @@ def update_contact(
     """Partially update a contact."""
     contact = _resolve_contact(contact_id, current_user, db)
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+
+    # L-32: reject duplicate phone numbers per user when number is being changed
+    if "phone_number" in updates and updates["phone_number"] != contact.phone_number:
+        duplicate = (
+            db.query(Contact)
+            .filter(
+                Contact.owner_id == contact.owner_id,
+                Contact.phone_number == updates["phone_number"],
+                Contact.id != contact.id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"You already have a contact with this phone number ({duplicate.name}). "
+                    "Please enter a different number."
+                ),
+            )
+
+    for key, value in updates.items():
         setattr(contact, key, value)
 
     # H-08: audit when an admin edits a contact owned by another user.

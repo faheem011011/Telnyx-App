@@ -260,18 +260,59 @@ def purchase_number(phone_number: str) -> dict:
     }
 
 
+_LIST_PAGE_SIZE = 250
+_MAX_PAGES = 1_000  # ~250 k numbers before we bail — guards against infinite loops
+
+
 def list_owned_numbers() -> list[dict]:
-    """List all phone numbers owned in Telnyx account."""
+    """List all phone numbers owned in Telnyx account.
+
+    H-25: the previous single-page fetch (page[size]=250) silently truncated
+    accounts with more than 250 numbers.  We now follow next_page_token until
+    exhausted, capped at _MAX_PAGES to guard against a runaway API response.
+    """
     _check_configured()
-    r = httpx.get(
-        "https://api.telnyx.com/v2/phone_numbers",
-        headers={"Authorization": f"Bearer {settings.telnyx_api_key}", "Accept": "application/json"},
-        params={"page[size]": 250},
-        timeout=15,
+    headers = {
+        "Authorization": f"Bearer {settings.telnyx_api_key}",
+        "Accept": "application/json",
+    }
+    params: dict = {"page[size]": _LIST_PAGE_SIZE}
+
+    items: list[dict] = []
+    pages = 0
+
+    while True:
+        r = httpx.get(
+            "https://api.telnyx.com/v2/phone_numbers",
+            headers=headers,
+            params=params,
+            timeout=15,
+        )
+        if not r.is_success:
+            raise ValueError(f"Telnyx list numbers failed ({r.status_code}): {r.text}")
+
+        body = r.json()
+        items.extend(body.get("data") or [])
+        pages += 1
+
+        next_token = (body.get("meta") or {}).get("next_page_token")
+        if not next_token:
+            break
+
+        if pages >= _MAX_PAGES:
+            log.warning(
+                "list_owned_numbers: reached MAX_PAGES=%d after %d numbers; "
+                "stopping pagination early — investigate account size or Telnyx response.",
+                _MAX_PAGES, len(items),
+            )
+            break
+
+        params = {"page[size]": _LIST_PAGE_SIZE, "page[token]": next_token}
+
+    log.info(
+        "list_owned_numbers: sync complete total_numbers=%d pages_fetched=%d",
+        len(items), pages,
     )
-    if not r.is_success:
-        raise ValueError(f"Telnyx list numbers failed ({r.status_code}): {r.text}")
-    items = r.json().get("data", [])
     return [
         {
             "sid": str(n["id"]),

@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Phone,
   PhoneIncoming,
   PhoneOutgoing,
   PhoneMissed,
+  PhoneOff,
   Voicemail,
   Star,
   Search,
@@ -27,12 +28,17 @@ const TABS = [
 ];
 
 export default function InboxPage() {
-  const [tab, setTab] = useState('unread');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const VALID_TAB_KEYS = TABS.map((t) => t.key);
+  const tab = VALID_TAB_KEYS.includes(searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'unread';
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selected, setSelected] = useState(null);
+  const [pageError, setPageError] = useState(null);
   const { makeCall } = useTelnyx();
   const navigate = useNavigate();
 
@@ -74,7 +80,7 @@ export default function InboxPage() {
     try {
       await makeCall(toE164(number));
     } catch (e) {
-      alert(e.message || 'Could not place call');
+      setPageError(e.message || 'Could not place call');
     }
   };
 
@@ -89,7 +95,7 @@ export default function InboxPage() {
       window.dispatchEvent(new CustomEvent('calls:read'));
       load();
     } catch {
-      alert('Failed to mark all as read. Please try again.');
+      setPageError('Failed to mark all as read.');
     }
   };
 
@@ -98,7 +104,7 @@ export default function InboxPage() {
       await callsApi.update(call.id, { is_starred: !call.is_starred });
       load();
     } catch {
-      alert('Failed to update. Please try again.');
+      setPageError('Failed to update.');
     }
   };
 
@@ -138,7 +144,7 @@ export default function InboxPage() {
             {TABS.map((t) => (
               <button
                 key={t.key}
-                onClick={() => setTab(t.key)}
+                onClick={() => setSearchParams({ tab: t.key })}
                 className={`tab-item ${tab === t.key ? 'active' : ''}`}
               >
                 {t.label}
@@ -146,6 +152,15 @@ export default function InboxPage() {
             ))}
           </div>
         </div>
+
+        {pageError && (
+          <div className="mx-6 mt-3 px-4 py-2 rounded-lg text-sm bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-between">
+            <span>{pageError}</span>
+            <button onClick={() => setPageError(null)} className="ml-2 hover:opacity-70">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Call list */}
         <div className="flex-1 overflow-y-auto">
@@ -191,10 +206,12 @@ function CallRow({ call, selected, onSelect, onCallBack, onToggleStar }) {
   const otherNumber = call.direction === 'inbound' ? call.from_number : call.to_number;
   const displayName = call.contact?.name || formatPhone(otherNumber);
   const isMissed = ['missed', 'no-answer', 'busy', 'failed'].includes(call.status);
+  const isCanceled = call.status === 'canceled';
   const hasVoicemail = !!call.voicemail_url;
 
   const getIcon = () => {
     if (hasVoicemail) return <Voicemail className="w-4 h-4" />;
+    if (isCanceled) return <PhoneOff className="w-4 h-4 text-amber-500" />;
     if (isMissed) return <PhoneMissed className="w-4 h-4 text-red-500" />;
     if (call.direction === 'inbound') return <PhoneIncoming className="w-4 h-4" />;
     return <PhoneOutgoing className="w-4 h-4" />;
@@ -202,6 +219,8 @@ function CallRow({ call, selected, onSelect, onCallBack, onToggleStar }) {
 
   const subtitle = hasVoicemail
     ? 'Voicemail'
+    : isCanceled
+    ? 'Call abandoned'
     : isMissed
     ? 'Missed call'
     : call.direction === 'inbound'
@@ -223,7 +242,7 @@ function CallRow({ call, selected, onSelect, onCallBack, onToggleStar }) {
           <div className="truncate text-sm">{displayName}</div>
           {call.is_starred && <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />}
         </div>
-        <div className={`flex items-center gap-1.5 text-xs mt-0.5 ${isMissed ? 'text-red-500' : 'text-muted'}`}>
+        <div className={`flex items-center gap-1.5 text-xs mt-0.5 ${isMissed ? 'text-red-500' : isCanceled ? 'text-amber-500' : 'text-muted'}`}>
           {getIcon()}
           <span className="truncate">{subtitle}</span>
           {call.duration_seconds > 0 && (
@@ -273,11 +292,12 @@ function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
       .then(({ url }) => { if (!cancelled) setRecordingSrc(url); })
       .catch((err) => {
         if (cancelled) return;
-        // Fall back to the cached URL — still works inside the 10-minute window.
-        if (err.response?.status === 404) {
+        const status = err.response?.status;
+        // 404 — never existed; 410 — existed but link expired with no way to refresh.
+        if (status === 404 || status === 410) {
           setRecordingError('Recording no longer available.');
         } else {
-          setRecordingSrc(call.recording_url);
+          setRecordingError('Unable to load recording.');
         }
       });
     return () => { cancelled = true; };

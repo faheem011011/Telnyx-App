@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { authApi } from '../services/api';
+import { authApi, callsApi } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -12,6 +12,7 @@ const SESSION_CHECK_INTERVAL = 5 * 60 * 1000;
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Initial session restore on mount
   useEffect(() => {
@@ -43,6 +44,24 @@ export function AuthProvider({ children }) {
       }
     }, SESSION_CHECK_INTERVAL);
     return () => clearInterval(id);
+  }, [user]);
+
+  // M-27: centralise unread-count polling here so every tab/component
+  // reads from one source of truth instead of each polling independently.
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+    const fetchUnread = () =>
+      callsApi.unreadCount().then((r) => setUnreadCount(r.count)).catch(() => {});
+    fetchUnread();
+    const id = setInterval(fetchUnread, 15000);
+    window.addEventListener('calls:read', fetchUnread);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('calls:read', fetchUnread);
+    };
   }, [user]);
 
   // Cross-tab logout: if the auth_token is removed in another tab
@@ -104,7 +123,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, unreadCount }}>
       {children}
     </AuthContext.Provider>
   );
