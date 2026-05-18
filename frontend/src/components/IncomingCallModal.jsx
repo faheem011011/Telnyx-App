@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Phone, PhoneOff, PhonePause } from 'lucide-react';
+import { Phone, PhoneOff, PhoneCall } from 'lucide-react';
 import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone } from '../utils/format';
 import Avatar from './Avatar';
@@ -296,7 +296,7 @@ function IncomingCallContent({ incomingCall, hasActiveCall, hasHeldCall, onAccep
                   e.currentTarget.style.border = '1.5px solid rgba(234,179,8,0.28)';
                 }}
               >
-                <PhonePause size={16} color="#ca8a04" />
+                <PhoneCall size={16} color="#ca8a04" />
               </div>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#ca8a04', letterSpacing: '0.01em', textAlign: 'center', lineHeight: 1.1 }}>Hold &<br/>Answer</span>
             </button>
