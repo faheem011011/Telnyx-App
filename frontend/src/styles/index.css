@@ -137,11 +137,6 @@ body {
     color: rgb(var(--accent));
   }
 
-  .dark .nav-item.active {
-    background: rgb(var(--bg-active));
-    color: rgb(var(--text-primary));
-  }
-
   .tab-item {
     @apply relative px-4 py-3 text-sm font-medium cursor-pointer transition-all;
     color: rgb(var(--text-secondary));

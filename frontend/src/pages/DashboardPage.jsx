@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { analyticsApi, adminApi } from '../services/api';
 import { useDepartments } from '../hooks/useDepartments';
-import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 
@@ -73,38 +72,33 @@ function pctChange(current, prev) {
 
 // ─── Theme colors ──────────────────────────────────────────────────────────────
 
-function useChartColors(theme) {
+function useChartColors() {
   return useMemo(() => ({
     accent:    '#1454F6',
-    green:     theme === 'dark' ? '#34d399' : '#10b981',
-    red:       theme === 'dark' ? '#f87171' : '#ef4444',
-    amber:     theme === 'dark' ? '#fbbf24' : '#f59e0b',
-    blue:      theme === 'dark' ? '#60a5fa' : '#3b82f6',
-    teal:      theme === 'dark' ? '#2dd4bf' : '#14b8a6',
-    pink:      theme === 'dark' ? '#f472b6' : '#ec4899',
-    orange:    theme === 'dark' ? '#fb923c' : '#f97316',
-    muted:     theme === 'dark' ? '#3f3f46' : '#e5e7eb',
-    textMuted: theme === 'dark' ? '#71717a' : '#9ca3af',
-    bg:        theme === 'dark' ? '#09090b' : '#ffffff',
-    border:    theme === 'dark' ? '#27272a' : '#e5e7eb',
-    isDark:    theme === 'dark',
-  }), [theme]);
+    green:     '#10b981',
+    red:       '#ef4444',
+    amber:     '#f59e0b',
+    blue:      '#3b82f6',
+    teal:      '#14b8a6',
+    pink:      '#ec4899',
+    orange:    '#f97316',
+    muted:     '#e5e7eb',
+    textMuted: '#9ca3af',
+    bg:        '#ffffff',
+    border:    '#e5e7eb',
+  }), []);
 }
 
 // ─── Design helpers ────────────────────────────────────────────────────────────
 
-function cardBorder(isDark) {
-  return isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.07)';
+function cardBorder() {
+  return '1px solid rgba(0,0,0,0.07)';
 }
-function cardShadow(isDark) {
-  return isDark
-    ? '0 1px 3px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.2)'
-    : '0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04)';
+function cardShadow() {
+  return '0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04)';
 }
-function cardShadowHover(isDark) {
-  return isDark
-    ? '0 4px 20px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.35)'
-    : '0 4px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)';
+function cardShadowHover() {
+  return '0 4px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)';
 }
 
 // ─── Skeleton ──────────────────────────────────────────────────────────────────
@@ -183,9 +177,9 @@ function StatCard({ icon: Icon, label, value, color, change, sub, colors }) {
       onMouseLeave={() => setHovered(false)}
       className="rounded-2xl p-4 cursor-default transition-all duration-200"
       style={{
-        background: colors.isDark ? 'rgb(24,24,27)' : '#ffffff',
-        border:     cardBorder(colors.isDark),
-        boxShadow:  hovered ? cardShadowHover(colors.isDark) : cardShadow(colors.isDark),
+        background: '#ffffff',
+        border:     cardBorder(),
+        boxShadow:  hovered ? cardShadowHover() : cardShadow(),
         transform:  hovered ? 'translateY(-1px)' : 'translateY(0)',
       }}
     >
@@ -194,7 +188,7 @@ function StatCard({ icon: Icon, label, value, color, change, sub, colors }) {
           {label}
         </span>
         <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-          style={{ background: color + (colors.isDark ? '22' : '15') }}>
+          style={{ background: color + '15' }}>
           <Icon className="w-3.5 h-3.5" style={{ color }} />
         </div>
       </div>
@@ -221,11 +215,9 @@ function ChartCard({ title, subtitle, accentColor, children, className = '', col
       onMouseLeave={() => setHovered(false)}
       className={`rounded-2xl overflow-hidden transition-all duration-200 ${className}`}
       style={{
-        background: colors.isDark
-          ? 'rgb(24,24,27)'
-          : `linear-gradient(160deg, ${ac}07 0%, #ffffff 40%)`,
-        border:    cardBorder(colors.isDark),
-        boxShadow: hovered ? cardShadowHover(colors.isDark) : cardShadow(colors.isDark),
+        background: `linear-gradient(160deg, ${ac}07 0%, #ffffff 40%)`,
+        border:    cardBorder(),
+        boxShadow: hovered ? cardShadowHover() : cardShadow(),
         transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
       }}
     >
@@ -412,7 +404,7 @@ function TopAreaCodesCards({ data, colors }) {
           <div key={item.area_code}
             className="flex items-center gap-3 p-3 rounded-xl transition-all duration-200"
             style={{
-              background: colors.isDark ? `${BRAND}09` : `${BRAND}06`,
+              background: `${BRAND}06`,
               border:     `1px solid ${BRAND}25`,
             }}>
             {/* Rank badge */}
@@ -448,7 +440,7 @@ function TopAreaCodesCards({ data, colors }) {
               </div>
 
               <div className="h-1.5 rounded-full overflow-hidden"
-                style={{ background: colors.isDark ? '#3f3f46' : '#e5e7eb', width: `${Math.round((item.count / maxCount) * 100)}%`, minWidth: 24 }}>
+                style={{ background: '#e5e7eb', width: `${Math.round((item.count / maxCount) * 100)}%`, minWidth: 24 }}>
                 <div className="h-full flex">
                   <div className="h-full transition-all duration-700"
                     style={{ width: `${Math.round((item.inbound  / (item.count || 1)) * 100)}%`, background: BRAND }} />
@@ -463,14 +455,14 @@ function TopAreaCodesCards({ data, colors }) {
           <div key={`empty-${idx}`}
             className="flex items-center gap-3 p-3 rounded-xl"
             style={{
-              border:     `1.5px dashed ${colors.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)'}`,
-              background: colors.isDark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.015)',
+              border:     '1.5px dashed rgba(0,0,0,0.08)',
+              background: 'rgba(0,0,0,0.015)',
             }}>
             {/* Rank badge — dimmed */}
             <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs"
               style={{
-                background: colors.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-                color:      colors.isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+                background: 'rgba(0,0,0,0.05)',
+                color:      'rgba(0,0,0,0.2)',
               }}>
               {idx + 1}
             </div>
@@ -479,12 +471,12 @@ function TopAreaCodesCards({ data, colors }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5">
                 <div className="h-2.5 rounded-full w-24"
-                  style={{ background: colors.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)' }} />
+                  style={{ background: 'rgba(0,0,0,0.07)' }} />
                 <div className="h-2 rounded-full w-10 ml-1"
-                  style={{ background: colors.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} />
+                  style={{ background: 'rgba(0,0,0,0.05)' }} />
               </div>
               <div className="h-1.5 rounded-full w-full"
-                style={{ background: colors.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} />
+                style={{ background: 'rgba(0,0,0,0.05)' }} />
             </div>
           </div>
         )
@@ -528,12 +520,8 @@ function RecentMessages({ messages, colors }) {
           <div key={m.id}
             className="flex items-start gap-3 px-5 py-3 transition-all duration-150 cursor-default"
             style={{
-              borderBottom: idx < messages.length - 1
-                ? `1px solid ${colors.isDark ? '#27272a' : '#f4f4f5'}`
-                : 'none',
-              background: isUnread
-                ? (colors.isDark ? `${BRAND}08` : `${BRAND}06`)
-                : 'transparent',
+              borderBottom: idx < messages.length - 1 ? '1px solid #f4f4f5' : 'none',
+              background: isUnread ? `${BRAND}06` : 'transparent',
             }}>
             <Avatar name={display} seed={other} size="sm" />
             <div className="min-w-0 flex-1">
@@ -581,15 +569,15 @@ function ContactsOverview({ overview, colors }) {
   ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-px"
-      style={{ background: colors.isDark ? 'rgba(255,255,255,0.05)' : '#f4f4f5' }}>
+      style={{ background: '#f4f4f5' }}>
       {items.map(({ icon: Icon, label, value, color }) => (
         <div key={label}
           className="flex flex-col items-center py-6 gap-2 relative overflow-hidden transition-all duration-200"
-          style={{ background: colors.isDark ? 'rgb(24,24,27)' : `${color}06` }}>
+          style={{ background: `${color}06` }}>
           <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300"
-            style={{ background: colors.isDark ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${color}10 0%, transparent 100%)` }} />
+            style={{ background: `linear-gradient(135deg, ${color}10 0%, transparent 100%)` }} />
           <div className="relative w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: color + (colors.isDark ? '25' : '15'), boxShadow: `0 0 12px ${color}30` }}>
+            style={{ background: color + '15', boxShadow: `0 0 12px ${color}30` }}>
             <Icon className="w-5 h-5" style={{ color }} />
           </div>
           <span className="relative text-2xl font-black tabular-nums">{value}</span>
@@ -631,9 +619,8 @@ function SectionHeading({ label, color }) {
 // ─── Main Dashboard ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { theme } = useTheme();
   const { user }  = useAuth();
-  const colors    = useChartColors(theme);
+  const colors    = useChartColors();
   const isAdmin   = user?.role === 'admin';
   const { departmentNames: departments } = useDepartments();
 
@@ -781,9 +768,7 @@ export default function DashboardPage() {
     !debouncedStart || !debouncedEnd || debouncedStart > debouncedEnd
   );
 
-  const pageBg = colors.isDark
-    ? 'rgb(var(--bg-primary))'
-    : 'linear-gradient(160deg, #fafafa 0%, #f5f0ff 40%, #f0f9ff 70%, #fafafa 100%)';
+  const pageBg = 'linear-gradient(160deg, #fafafa 0%, #f5f0ff 40%, #f0f9ff 70%, #fafafa 100%)';
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ background: pageBg }}>
@@ -791,14 +776,10 @@ export default function DashboardPage() {
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between mb-8 relative">
-          {!colors.isDark && (
-            <>
-              <div className="absolute -top-8 -left-8 w-64 h-32 rounded-full blur-3xl pointer-events-none opacity-20"
-                style={{ background: `radial-gradient(ellipse, ${colors.accent}, transparent)` }} />
-              <div className="absolute -top-4 left-32 w-48 h-24 rounded-full blur-3xl pointer-events-none opacity-10"
-                style={{ background: `radial-gradient(ellipse, ${colors.blue}, transparent)` }} />
-            </>
-          )}
+          <div className="absolute -top-8 -left-8 w-64 h-32 rounded-full blur-3xl pointer-events-none opacity-20"
+            style={{ background: `radial-gradient(ellipse, ${colors.accent}, transparent)` }} />
+          <div className="absolute -top-4 left-32 w-48 h-24 rounded-full blur-3xl pointer-events-none opacity-10"
+            style={{ background: `radial-gradient(ellipse, ${colors.blue}, transparent)` }} />
 
           <div className="relative">
             <div className="flex items-center gap-3 mb-1">
@@ -828,9 +809,9 @@ export default function DashboardPage() {
               title="Refresh data"
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40"
               style={{
-                background: colors.isDark ? 'rgb(39,39,42)' : '#ffffff',
-                border:     colors.isDark ? '1px solid rgba(255,255,255,0.1)' : `1px solid ${BRAND}30`,
-                boxShadow:  cardShadow(colors.isDark),
+                background: '#ffffff',
+                border:     `1px solid ${BRAND}30`,
+                boxShadow:  cardShadow(),
                 color:      BRAND,
               }}
             >
@@ -970,7 +951,7 @@ export default function DashboardPage() {
         {/* ── Truncated warning ───────────────────────────────────────────── */}
         {data?.truncated && (
           <div className="mb-6 px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2"
-            style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.35)', color: colors.isDark ? '#fde047' : '#92400e' }}>
+            style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.35)', color: '#92400e' }}>
             <span>⚠️</span>
             <span>Time-series charts show only the most recent 5,000 calls. Summary KPI totals are exact.</span>
           </div>
@@ -981,9 +962,9 @@ export default function DashboardPage() {
           <div className="flex flex-col items-center justify-center py-20 gap-5">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
               style={{
-                background: colors.isDark ? 'rgba(248,113,113,0.08)' : 'rgba(239,68,68,0.07)',
-                border:     cardBorder(colors.isDark),
-                boxShadow:  cardShadow(colors.isDark),
+                background: 'rgba(239,68,68,0.07)',
+                border:     cardBorder(),
+                boxShadow:  cardShadow(),
               }}>
               <BarChart2 className="w-7 h-7" style={{ color: colors.red }} />
             </div>
@@ -1088,17 +1069,15 @@ export default function DashboardPage() {
                   <SectionHeading label="Recent Messages" color={BRAND} />
                   <div className="rounded-2xl overflow-hidden mb-10"
                     style={{
-                      border:    cardBorder(colors.isDark),
-                      boxShadow: cardShadow(colors.isDark),
-                      background: colors.isDark
-                        ? 'rgb(24,24,27)'
-                        : `linear-gradient(160deg, ${BRAND}07 0%, #ffffff 35%)`,
+                      border:    cardBorder(),
+                      boxShadow: cardShadow(),
+                      background: `linear-gradient(160deg, ${BRAND}07 0%, #ffffff 35%)`,
                     }}>
                     <div className="h-0.5" style={{
                       background: `linear-gradient(90deg, transparent, ${BRAND}70, transparent)`,
                     }} />
                     <div className="px-5 py-4 flex items-center justify-between border-b"
-                      style={{ borderColor: colors.isDark ? '#27272a' : '#f4f4f5' }}>
+                      style={{ borderColor: '#f4f4f5' }}>
                       <div>
                         <h3 className="font-bold text-sm">Recent Messages</h3>
                         <p className="text-xs opacity-40 mt-0.5">Read and Unread</p>
@@ -1131,18 +1110,16 @@ export default function DashboardPage() {
                   <SectionHeading label="Contacts Overview" color={BRAND} />
                   <div className="rounded-2xl overflow-hidden mb-10"
                     style={{
-                      border:    cardBorder(colors.isDark),
-                      boxShadow: cardShadow(colors.isDark),
+                      border:    cardBorder(),
+                      boxShadow: cardShadow(),
                     }}>
                     <div className="h-0.5" style={{
                       background: `linear-gradient(90deg, transparent, ${BRAND}70, transparent)`,
                     }} />
                     <div className="px-5 py-4 border-b"
                       style={{
-                        borderColor: colors.isDark ? 'rgba(255,255,255,0.06)' : '#f4f4f5',
-                        background:  colors.isDark
-                          ? 'rgb(24,24,27)'
-                          : `linear-gradient(160deg, ${BRAND}07 0%, #ffffff 40%)`,
+                        borderColor: '#f4f4f5',
+                        background: `linear-gradient(160deg, ${BRAND}07 0%, #ffffff 40%)`,
                       }}>
                       <h3 className="font-bold text-sm">Contacts Overview</h3>
                       <p className="text-xs opacity-40 mt-0.5">Total · new · favourites · blocked</p>
