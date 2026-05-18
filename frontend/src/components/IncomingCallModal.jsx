@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Phone, PhoneOff } from 'lucide-react';
+import { Phone, PhoneOff, PhonePause } from 'lucide-react';
 import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone } from '../utils/format';
 import Avatar from './Avatar';
@@ -12,6 +12,9 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 //   Some browsers (Safari < 14) require a user gesture before AudioContext
 //   can play; in that case the modal will appear silently. The visual ring
 //   still pulses to draw attention.
+//
+// Each IncomingCallContent mounts its own ringtone — so a second queued call
+// card rings independently, giving the user an audible cue about call count.
 function useRingtone() {
   useEffect(() => {
     let active = true;
@@ -47,8 +50,6 @@ function useRingtone() {
         nextTimer = setTimeout(ring, 6_000);
       };
 
-      // ctx may be suspended until the first user gesture — resume it silently.
-      // On Safari < 14 (no prior gesture) this rejects; degrade gracefully.
       ctx.resume()
         .then(ring)
         .catch((err) => console.warn('[Ringtone] AudioContext blocked:', err));
@@ -63,18 +64,18 @@ function useRingtone() {
         try { ctx.close(); } catch (e) { console.warn('[Ringtone] ctx.close failed', e); }
       }
     };
-  }, []); // runs on mount; the inner content component is only mounted while incomingCall is set, so the ring loop starts on call arrival and is torn down on unmount.
+  }, []);
 }
 
-function IncomingCallContent({ incomingCall, onAccept, onReject }) {
+// Single incoming call card.
+// hasActiveCall — there is already a live call; "Hold & Answer" is offered instead of "Accept"
+// hasHeldCall   — a call is already on hold; "Hold & Answer" is disabled (max 1 held call)
+function IncomingCallContent({ incomingCall, hasActiveCall, hasHeldCall, onAccept, onReject, onHoldAndAnswer }) {
   useRingtone();
 
   const containerRef = useRef(null);
   useFocusTrap(containerRef);
 
-  // For inbound calls the Telnyx WebRTC SDK exposes the caller's E.164 on
-  // `incomingCall.from`. Never fall back to `destinationNumber` — that is
-  // the receiver's own DID, not the caller.
   const from =
     incomingCall.options?.remoteCallerNumber ||
     incomingCall.options?.callerNumber       ||
@@ -82,7 +83,13 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
     incomingCall.options?.displayName        ||
     'Unknown caller';
 
-  const titleId = 'incoming-call-title';
+  const titleId = `incoming-call-title-${incomingCall.id}`;
+
+  // When a call is already active:
+  //   - if no held slot is occupied → offer "Hold & Answer"
+  //   - if held slot is full         → only "Decline" available
+  const canHoldAndAnswer = hasActiveCall && !hasHeldCall;
+  const canAccept        = !hasActiveCall;
 
   return (
     <div
@@ -91,7 +98,7 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
       aria-modal="true"
       aria-labelledby={titleId}
       aria-live="assertive"
-      className="fixed top-4 right-4 z-50 animate-slide-down"
+      className="animate-slide-down"
       style={{ width: 308 }}
     >
       <span id={titleId} className="sr-only">Incoming call from {formatPhone(from)}</span>
@@ -154,7 +161,7 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
               Incoming Call
             </div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>
-              Ringing…
+              {hasActiveCall ? (canHoldAndAnswer ? 'Call waiting' : 'Can\'t answer — hold occupied') : 'Ringing…'}
             </div>
           </div>
         </div>
@@ -175,14 +182,14 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
           </div>
         </div>
 
-        {/* Accept / Decline buttons */}
+        {/* Action buttons */}
         <div
           style={{
             display: 'flex',
             borderTop: '1px solid rgba(226,232,240,0.55)',
           }}
         >
-          {/* Decline */}
+          {/* Decline — always available */}
           <button
             onClick={onReject}
             style={{
@@ -219,41 +226,81 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
             <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', letterSpacing: '0.01em' }}>Decline</span>
           </button>
 
-          {/* Accept */}
-          <button
-            onClick={onAccept}
-            style={{
-              flex: 1, padding: '11px 0',
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(34,197,94,0.055)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-          >
-            <div
+          {/* Accept (no active call) */}
+          {canAccept && (
+            <button
+              onClick={onAccept}
               style={{
-                width: 38, height: 38, borderRadius: '50%',
-                background: 'rgba(34,197,94,0.09)',
-                border: '1.5px solid rgba(34,197,94,0.22)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.15s',
+                flex: 1, padding: '11px 0',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                transition: 'background 0.15s',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(34,197,94,0.18)';
-                e.currentTarget.style.border = '1.5px solid rgba(34,197,94,0.4)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(34,197,94,0.09)';
-                e.currentTarget.style.border = '1.5px solid rgba(34,197,94,0.22)';
-              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(34,197,94,0.055)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
-              <Phone size={16} color="#16a34a" fill="#16a34a" />
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', letterSpacing: '0.01em' }}>Accept</span>
-          </button>
+              <div
+                style={{
+                  width: 38, height: 38, borderRadius: '50%',
+                  background: 'rgba(34,197,94,0.09)',
+                  border: '1.5px solid rgba(34,197,94,0.22)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(34,197,94,0.18)';
+                  e.currentTarget.style.border = '1.5px solid rgba(34,197,94,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(34,197,94,0.09)';
+                  e.currentTarget.style.border = '1.5px solid rgba(34,197,94,0.22)';
+                }}
+              >
+                <Phone size={16} color="#16a34a" fill="#16a34a" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', letterSpacing: '0.01em' }}>Accept</span>
+            </button>
+          )}
+
+          {/* Hold & Answer (active call exists, held slot free) */}
+          {canHoldAndAnswer && (
+            <button
+              onClick={onHoldAndAnswer}
+              style={{
+                flex: 1, padding: '11px 0',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(234,179,8,0.07)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <div
+                style={{
+                  width: 38, height: 38, borderRadius: '50%',
+                  background: 'rgba(234,179,8,0.10)',
+                  border: '1.5px solid rgba(234,179,8,0.28)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(234,179,8,0.20)';
+                  e.currentTarget.style.border = '1.5px solid rgba(234,179,8,0.5)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(234,179,8,0.10)';
+                  e.currentTarget.style.border = '1.5px solid rgba(234,179,8,0.28)';
+                }}
+              >
+                <PhonePause size={16} color="#ca8a04" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#ca8a04', letterSpacing: '0.01em', textAlign: 'center', lineHeight: 1.1 }}>Hold &<br/>Answer</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -261,13 +308,36 @@ function IncomingCallContent({ incomingCall, onAccept, onReject }) {
 }
 
 export default function IncomingCallModal() {
-  const { incomingCall, acceptIncoming, rejectIncoming } = useTelnyx();
-  if (!incomingCall) return null;
+  const {
+    incomingCalls,
+    activeCall,
+    heldCallInfo,
+    acceptIncoming,
+    rejectIncoming,
+    acceptAndHold,
+  } = useTelnyx();
+
+  if (!incomingCalls.length) return null;
+
+  const hasActiveCall = !!activeCall;
+  const hasHeldCall   = !!heldCallInfo;
+
   return (
-    <IncomingCallContent
-      incomingCall={incomingCall}
-      onAccept={acceptIncoming}
-      onReject={rejectIncoming}
-    />
+    <div
+      className="fixed top-4 right-4 z-50 flex flex-col gap-3"
+      style={{ maxWidth: 308 }}
+    >
+      {incomingCalls.map((call) => (
+        <IncomingCallContent
+          key={call.id}
+          incomingCall={call}
+          hasActiveCall={hasActiveCall}
+          hasHeldCall={hasHeldCall}
+          onAccept={() => acceptIncoming(call)}
+          onReject={() => rejectIncoming(call)}
+          onHoldAndAnswer={() => acceptAndHold(call)}
+        />
+      ))}
+    </div>
   );
 }

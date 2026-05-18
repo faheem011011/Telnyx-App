@@ -247,8 +247,9 @@ export const AnimatedForm = memo(function AnimatedForm({
   footerNote,
   forgotPasswordLink,
 }) {
-  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [visibleFields, setVisibleFields] = useState({});
   const [errors, setErrors] = useState({});
+  const toggleVisible = (id) => setVisibleFields((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const validate = (event) => {
     const currentErrors = {};
@@ -321,7 +322,7 @@ export const AnimatedForm = memo(function AnimatedForm({
                   name={field.id}
                   type={
                     field.type === 'password'
-                      ? passwordVisible
+                      ? visibleFields[field.id]
                         ? 'text'
                         : 'password'
                       : field.type
@@ -334,10 +335,10 @@ export const AnimatedForm = memo(function AnimatedForm({
                 {field.type === 'password' && (
                   <button
                     type="button"
-                    onClick={() => setPasswordVisible((v) => !v)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-neutral-400 hover:text-neutral-600:text-neutral-200"
+                    onClick={() => toggleVisible(field.id)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-neutral-400 hover:text-neutral-600"
                   >
-                    {passwordVisible ? (
+                    {visibleFields[field.id] ? (
                       <Eye className="h-4 w-4" />
                     ) : (
                       <EyeOff className="h-4 w-4" />

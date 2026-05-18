@@ -70,7 +70,7 @@ export default function Sidebar({ onOpenDialer }) {
       {/* Top brand bar */}
       <div className="h-16 px-4 flex items-center gap-3"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-        <img src="/logo.png" alt="AlphaCall" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+        <img src="/loginLogo.png" alt="AlphaCall" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
         <div className="min-w-0">
           <div className="font-display font-bold text-base truncate text-white">AlphaCall</div>
           <div className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.65)' }}>{user?.name}</div>

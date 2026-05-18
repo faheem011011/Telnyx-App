@@ -1,32 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { adminApi } from '../services/api';
 
-let _cache = null;
-let _pending = null;
-
 export function useDepartments() {
-  const [departments, setDepartments] = useState(_cache || []);
-  const [loading, setLoading] = useState(!_cache);
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (_cache) return;
-    if (!_pending) {
-      _pending = adminApi.listDepartments();
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await adminApi.listDepartments();
+      setDepartments(data);
+    } catch {
+      // silent — callers handle the empty-state UI
+    } finally {
+      setLoading(false);
     }
-    let cancelled = false;
-    _pending
-      .then((data) => {
-        if (!cancelled) {
-          _cache = data;
-          setDepartments(data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
   }, []);
 
-  return { departments, loading };
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  // Active department names only — for user-creation / edit dropdowns.
+  const departmentNames = departments
+    .filter((d) => d.is_active)
+    .map((d) => d.name);
+
+  return { departments, departmentNames, loading, refetch };
 }

@@ -67,7 +67,7 @@ class PhoneNumber(Base):
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     friendly_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     assigned_to_user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     cap_voice: Mapped[bool] = mapped_column(Boolean, default=True)
     cap_sms: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -87,7 +87,7 @@ class Contact(Base):
     __tablename__ = "contacts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -176,6 +176,17 @@ class Message(Base):
     )
 
 
+class Department(Base):
+    """Admin-managed department — replaces the old hardcoded Literal list."""
+
+    __tablename__ = "departments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class AuditLog(Base):
     """Immutable record of every admin action."""
 
@@ -232,7 +243,7 @@ class WebhookEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     telnyx_event_id: Mapped[str] = mapped_column(
-        String(128), unique=True, nullable=False, index=True
+        String(128), unique=True, nullable=False
     )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     processed_at: Mapped[datetime] = mapped_column(
