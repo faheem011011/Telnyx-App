@@ -9,16 +9,19 @@ const TelnyxContext = createContext(null);
 const TELNYX_DEFAULTS = {
   deviceReady: false,
   deviceError: null,
-  incomingCall: null,
+  incomingCalls: [],      // H-11: queue instead of single incomingCall
   activeCall: null,
   activeCallInfo: null,
   activeCallSdkState: null,
+  heldCallInfo: null,
   callNotification: null,
   muted: false,
   recording: false,
   makeCall: () => {},
   acceptIncoming: () => {},
   rejectIncoming: () => {},
+  acceptAndHold: () => {},
+  unholdCall: () => {},
   hangup: () => {},
   toggleMute: () => {},
   toggleRecording: () => {},
@@ -70,8 +73,6 @@ function classifyTerminalCause(call) {
   if (FAILURE_CAUSES.has(cause) || (code >= 400 && code !== 408 && code !== 480 && code !== 487)) {
     return { type: 'failed', message: `Call failed (${cause || `code ${code}`})`, cause, code };
   }
-  // Fall back to the "didn't pick up" bucket — covers NO_USER_RESPONSE,
-  // ORIGINATOR_CANCEL, NORMAL_CLEARING-before-active, etc.
   return { type: 'no-answer', message: 'No answer', cause, code };
 }
 
@@ -111,42 +112,48 @@ function CallNotificationToast({ notification, onDismiss }) {
 
 export function TelnyxProvider({ children }) {
   const { user } = useAuth();
+  // H-08: derive a stable primitive so the WebRTC init effect only re-runs
+  // when the logged-in identity changes, not on every profile heartbeat.
+  const userId = user?.id;
   const clientRef = useRef(null);
   const audioRef  = useRef(null);
 
   // ── Refs that must always reflect the latest value without triggering re-renders
   // activeCallRef: the canonical, always-current SDK call object used for hangup/mute/dtmf.
-  //   Using the React state value for these would cause stale-closure bugs when the SDK
-  //   replaces the call object (e.g. after the 'active' notification).
   const activeCallRef       = useRef(null);
   // wasConnectedRef: did this call ever reach the 'active' SDK state?
-  //   Used to pick the right "call ended" vs "no answer" notification message.
   const wasConnectedRef     = useRef(false);
   // userHangupRef: did the user deliberately click Hang Up?
-  //   If so, suppress the "Call ended" toast — they already know.
   const userHangupRef       = useRef(false);
   // answeredCallIdRef: guard against the SDK re-firing 'ringing' after answer()
   const answeredCallIdRef   = useRef(null);
   // micStreamRef: the MediaStream we open with getUserMedia before newCall().
-  //   On failed call setups the Telnyx SDK does not always release the mic
-  //   tracks, so the browser keeps the "microphone in use" indicator on. We
-  //   keep an explicit handle and stop the tracks ourselves on terminal state.
   const micStreamRef        = useRef(null);
   const callTimeoutRef      = useRef(null);
+  // H-11: ref for the currently held call + its activeCallInfo snapshot.
+  // Stored as { call: SDKCall, info: activeCallInfo } to avoid stale closures.
+  const heldCallRef         = useRef(null);
+  // H-11: mirrors activeCallInfo state so callbacks can read the latest value
+  // without taking activeCallInfo as a dep (which would cause stale closures).
+  const activeCallInfoRef   = useRef(null);
 
-  const [deviceReady,       setDeviceReady]       = useState(false);
-  const [deviceError,       setDeviceError]       = useState(null);
-  const [incomingCall,      setIncomingCall]      = useState(null);
-  const [activeCall,        setActiveCall]        = useState(null);
-  const [activeCallInfo,    setActiveCallInfo]    = useState(null);
+  const [deviceReady,        setDeviceReady]        = useState(false);
+  const [deviceError,        setDeviceError]        = useState(null);
+  const [incomingCalls,      setIncomingCalls]      = useState([]);   // H-11: array
+  const [activeCall,         setActiveCall]         = useState(null);
+  const [activeCallInfo,     setActiveCallInfo]     = useState(null);
   // activeCallSdkState mirrors the raw SDK call state so the UI can show
   // "Calling…" → "Ringing…" → timer without polling the call object directly.
   const [activeCallSdkState, setActiveCallSdkState] = useState(null);
-  const [callNotification,  setCallNotification] = useState(null);
-  const [muted,             setMuted]             = useState(false);
-  const [recording,         setRecording]         = useState(false);
-  const [tokenVersion,      setTokenVersion]      = useState(0);
+  const [heldCallInfo,       setHeldCallInfo]       = useState(null); // H-11: held call display info
+  const [callNotification,   setCallNotification]   = useState(null);
+  const [muted,              setMuted]              = useState(false);
+  const [recording,          setRecording]          = useState(false);
+  const [tokenVersion,       setTokenVersion]       = useState(0);
   const refreshTimerRef = useRef(null);
+
+  // Keep activeCallInfoRef in sync so stale-closure-safe callbacks can read it
+  useEffect(() => { activeCallInfoRef.current = activeCallInfo; }, [activeCallInfo]);
 
   // Auto-dismiss call-end toasts after 4 s
   useEffect(() => {
@@ -208,19 +215,17 @@ export function TelnyxProvider({ children }) {
 
   // ── SDK initialisation / token refresh ─────────────────────────────────────
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let client;
     let cancelled = false;
 
     const scheduleRefresh = (token) => {
       clearTimeout(refreshTimerRef.current);
       // Safe fallback: refresh in 15 min if we cannot read the token's exp.
-      // 23 h was dangerously long given Telnyx tokens expire in ~3 h.
       const FALLBACK_MS = 15 * 60 * 1_000;
       let delay = FALLBACK_MS;
       try {
         // JWTs use base64url (- and _ instead of + and /, no padding).
-        // atob() requires standard base64 with padding — normalise first.
         const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
         const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
         const { exp } = JSON.parse(atob(padded));
@@ -229,11 +234,8 @@ export function TelnyxProvider({ children }) {
         console.warn('[Telnyx] Failed to decode token payload; will refresh in 15 min', err);
       }
 
-      // When the timer fires, wait until no call is active before refreshing.
-      // Refreshing mid-call runs cleanup → client.disconnect() → call drops.
       const attemptRefresh = () => {
         if (activeCallRef.current) {
-          // Call in progress — check again in 30 s without disconnecting
           refreshTimerRef.current = setTimeout(attemptRefresh, 30_000);
         } else {
           setTokenVersion((v) => v + 1);
@@ -273,9 +275,12 @@ export function TelnyxProvider({ children }) {
           // ── Ringing ──────────────────────────────────────────────────────
           if (state === 'ringing') {
             if (call.direction === 'inbound') {
-              // Guard: SDK re-fires 'ringing' after answer() — ignore it
+              // Guard: SDK re-fires 'ringing' after answer() — ignore it.
+              // H-11: push to queue rather than replace.
               if (!cancelled && answeredCallIdRef.current !== call.id) {
-                setIncomingCall(call);
+                setIncomingCalls(prev =>
+                  prev.some(c => c.id === call.id) ? prev : [...prev, call]
+                );
               }
             } else {
               // Outbound ringing: keep activeCallRef fresh so hangup works,
@@ -297,7 +302,6 @@ export function TelnyxProvider({ children }) {
             if (!cancelled) {
               setActiveCall(call);
               setActiveCallSdkState('active');
-              // Set startedAt on first active event; keep it on subsequent ones
               setActiveCallInfo((prev) =>
                 prev
                   ? { ...prev, startedAt: prev.startedAt || Date.now(), connected: true }
@@ -308,30 +312,26 @@ export function TelnyxProvider({ children }) {
 
           // ── Terminal ──────────────────────────────────────────────────────
           if (TERMINAL_STATES.has(state)) {
-            // Release the mic immediately — the SDK does not reliably stop the
-            // local stream when a call fails before reaching 'active' (e.g. the
-            // connection has no outbound webhook configured and Telnyx replies
-            // 503/CALL_REJECTED). Without this, the browser shows the mic-in-use
-            // indicator until the tab is reloaded.
+            // H-11: guard which call is terminating before touching refs.
+            // In single-call mode activeCallRef.current was always the terminating
+            // call, but in multi-call mode it may be the held call or an incoming
+            // call that was never made active — we must not null out the wrong ref.
             releaseLocalMedia(call);
-            activeCallRef.current = null;
-            if (!cancelled) {
-              const wasConn      = wasConnectedRef.current;
-              const wasUserHangup = userHangupRef.current;
-              wasConnectedRef.current = false;
-              userHangupRef.current   = false;
+            const isActiveCall = activeCallRef.current?.id === call.id;
+            const isHeldCall   = heldCallRef.current?.call?.id === call.id;
+            if (isActiveCall) activeCallRef.current = null;
 
-              // Log the SDK cause/causeCode so the real reason behind an instant
-              // failure is visible in the browser console. Common values:
-              //   USER_BUSY                    — destination busy
-              //   NO_USER_RESPONSE             — rang, never picked up
-              //   ORIGINATOR_CANCEL            — caller hung up before pickup
-              //   CALL_REJECTED / 603          — Telnyx routing rejected the call
-              //   NO_ROUTE_DESTINATION         — no outbound voice webhook is
-              //                                  configured on the Telnyx
-              //                                  Connection (the most common
-              //                                  cause of "instant No answer"
-              //                                  for fresh setups).
+            if (!cancelled) {
+              // Only read wasConn/wasUserHangup for the active call
+              let wasConn = false;
+              let wasUserHangup = false;
+              if (isActiveCall) {
+                wasConn       = wasConnectedRef.current;
+                wasUserHangup = userHangupRef.current;
+                wasConnectedRef.current = false;
+                userHangupRef.current   = false;
+              }
+
               const causeStr =
                 call?.cause || call?.params?.cause || call?.options?.cause;
               const causeCode =
@@ -343,8 +343,8 @@ export function TelnyxProvider({ children }) {
                 );
               }
 
-              // Only notify when the remote side ended the call
-              if (!wasUserHangup) {
+              // Only notify when the remote side ended the active call
+              if (isActiveCall && !wasUserHangup) {
                 if (wasConn) {
                   setCallNotification({ type: 'ended', message: 'Call ended' });
                 } else if (call.direction === 'outbound') {
@@ -353,9 +353,29 @@ export function TelnyxProvider({ children }) {
                 }
               }
 
-              setIncomingCall((prev) => (prev?.id === call.id ? null : prev));
-              clearCallState();
-              answeredCallIdRef.current = null;
+              // Remove from ringing queue regardless of which call terminated
+              setIncomingCalls(prev => prev.filter(c => c.id !== call.id));
+
+              if (isHeldCall) {
+                // Held call terminated on its own (other party hung up while on hold)
+                heldCallRef.current = null;
+                setHeldCallInfo(null);
+              }
+
+              if (isActiveCall) {
+                clearCallState();
+                answeredCallIdRef.current = null;
+                // Auto-restore held call when the active call ends
+                const held = heldCallRef.current;
+                if (held) {
+                  try { held.call.unhold(); } catch (_) {}
+                  heldCallRef.current   = null;
+                  activeCallRef.current = held.call;
+                  setActiveCall(held.call);
+                  setActiveCallInfo(held.info);
+                  setHeldCallInfo(null);
+                }
+              }
             }
           }
         });
@@ -392,7 +412,7 @@ export function TelnyxProvider({ children }) {
       clientRef.current = null;
       setDeviceReady(false);
     };
-  }, [user, tokenVersion, attachAudio, clearCallState, _forceCleanup, releaseLocalMedia]);
+  }, [userId, tokenVersion, attachAudio, clearCallState, _forceCleanup, releaseLocalMedia]);
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -405,9 +425,7 @@ export function TelnyxProvider({ children }) {
     }
 
     // Open the mic ourselves and hold onto the stream so we can guarantee it
-    // gets stopped on terminal state. The SDK opens its own internal stream
-    // but does not always release it on failed setups, leaving the browser's
-    // microphone indicator stuck until reload.
+    // gets stopped on terminal state.
     try {
       micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
@@ -425,8 +443,6 @@ export function TelnyxProvider({ children }) {
     }
 
     // C-06: wrap newCall() so a SDK/network failure does not leak the mic stream.
-    // If newCall() throws, no SDK terminal event ever fires, so the callbacks that
-    // normally release media never run — we must clean up explicitly here.
     let call;
     try {
       call = clientRef.current.newCall({
@@ -442,13 +458,10 @@ export function TelnyxProvider({ children }) {
       throw new Error('Failed to initiate call. Please try again.');
     }
 
-    // Assign refs and state only after successful call creation to avoid
-    // ghost active-call UI if newCall() had thrown above.
     activeCallRef.current   = call;
     wasConnectedRef.current = false;
     userHangupRef.current   = false;
 
-    // Auto-cancel if the call never connects within 45 seconds.
     callTimeoutRef.current = setTimeout(() => {
       if (activeCallRef.current && !wasConnectedRef.current) {
         _forceCleanup('Call timed out — no answer.');
@@ -456,81 +469,133 @@ export function TelnyxProvider({ children }) {
     }, 45_000);
 
     setActiveCall(call);
-    setActiveCallSdkState(null);   // SDK will drive state via notifications
+    setActiveCallSdkState(null);
     setActiveCallInfo({
       callId: call.id,
       number: toNumber,
       direction: 'outbound',
-      startedAt: null,     // Set when 'active' fires
+      startedAt: null,
       connected: false,
     });
     setMuted(false);
     return call;
-  }, [deviceReady, user, releaseLocalMedia, clearCallState]);
+  }, [deviceReady, user, releaseLocalMedia, clearCallState, _forceCleanup]);
 
-  const acceptIncoming = useCallback(() => {
-    if (!incomingCall) return;
-
-    // Try every field the Telnyx SDK might use for the caller's number.
-    // For inbound calls the SDK exposes the caller's E.164 on `incomingCall.from`.
-    // Never fall back to `destinationNumber` — that is the *user's own* number.
+  // H-11: acceptIncoming now takes the specific call to answer (not from state)
+  const acceptIncoming = useCallback((call) => {
+    if (!call) return;
     const from =
-      incomingCall.options?.remoteCallerNumber ||
-      incomingCall.options?.callerNumber       ||
-      incomingCall.from                        ||
-      incomingCall.options?.displayName        ||
+      call.options?.remoteCallerNumber ||
+      call.options?.callerNumber       ||
+      call.from                        ||
+      call.options?.displayName        ||
       'Unknown';
-
-    answeredCallIdRef.current = incomingCall.id;
-    activeCallRef.current     = incomingCall;
+    answeredCallIdRef.current = call.id;
+    activeCallRef.current     = call;
     wasConnectedRef.current   = false;
     userHangupRef.current     = false;
-
-    incomingCall.answer({ remoteElement: audioRef.current || undefined });
-
-    setActiveCall(incomingCall);
-    setActiveCallSdkState(null);   // SDK will confirm with 'active' notification
-    // Do NOT set connected:true yet — the SDK 'active' event does that
+    call.answer({ remoteElement: audioRef.current || undefined });
+    setActiveCall(call);
+    setActiveCallSdkState(null);
     setActiveCallInfo({
-      callId: incomingCall.id,
+      callId: call.id,
       number: from,
       direction: 'inbound',
-      startedAt: null,     // Set when 'active' fires
+      startedAt: null,
       connected: false,
     });
-    setIncomingCall(null);
+    setIncomingCalls(prev => prev.filter(c => c.id !== call.id));
     setMuted(false);
-  }, [incomingCall]);
+  }, []); // all values from args or refs — no state deps
 
-  const rejectIncoming = useCallback(() => {
-    if (!incomingCall) return;
-    try { incomingCall.hangup(); } catch (e) { console.warn('[Telnyx] reject hangup failed', e); }
-    releaseLocalMedia(incomingCall);
-    setIncomingCall(null);
-  }, [incomingCall, releaseLocalMedia]);
+  // H-11: rejectIncoming now takes the specific call to reject
+  const rejectIncoming = useCallback((call) => {
+    if (!call) return;
+    try { call.hangup(); } catch (e) { console.warn('[Telnyx] reject hangup failed', e); }
+    releaseLocalMedia(call);
+    setIncomingCalls(prev => prev.filter(c => c.id !== call.id));
+  }, [releaseLocalMedia]);
+
+  // H-11: hold the current active call and answer a new incoming call
+  const acceptAndHold = useCallback((newCall) => {
+    if (!newCall) return;
+    const currentActive = activeCallRef.current;
+    if (currentActive) {
+      try { currentActive.hold(); } catch (e) { console.warn('[Telnyx] hold failed', e); }
+      heldCallRef.current = { call: currentActive, info: activeCallInfoRef.current };
+      setHeldCallInfo(activeCallInfoRef.current);
+    }
+    const from =
+      newCall.options?.remoteCallerNumber ||
+      newCall.options?.callerNumber       ||
+      newCall.from                        ||
+      newCall.options?.displayName        ||
+      'Unknown';
+    answeredCallIdRef.current = newCall.id;
+    activeCallRef.current     = newCall;
+    wasConnectedRef.current   = false;
+    userHangupRef.current     = false;
+    newCall.answer({ remoteElement: audioRef.current || undefined });
+    setActiveCall(newCall);
+    setActiveCallSdkState(null);
+    setActiveCallInfo({
+      callId: newCall.id,
+      number: from,
+      direction: 'inbound',
+      startedAt: null,
+      connected: false,
+    });
+    setIncomingCalls(prev => prev.filter(c => c.id !== newCall.id));
+    setMuted(false);
+  }, []); // all from refs/args — no state deps
+
+  // H-11: swap held↔active. When there is an active call it is put on hold;
+  // when there is no active call the held call is simply resumed.
+  const unholdCall = useCallback(() => {
+    const held = heldCallRef.current;
+    if (!held) return;
+    try { held.call.unhold(); } catch (e) { console.warn('[Telnyx] unhold failed', e); }
+    const currentActive = activeCallRef.current;
+    if (currentActive) {
+      try { currentActive.hold(); } catch (e) { console.warn('[Telnyx] hold on swap failed', e); }
+      heldCallRef.current = { call: currentActive, info: activeCallInfoRef.current };
+      setHeldCallInfo(activeCallInfoRef.current);
+    } else {
+      heldCallRef.current = null;
+      setHeldCallInfo(null);
+    }
+    activeCallRef.current   = held.call;
+    wasConnectedRef.current = false;
+    setActiveCall(held.call);
+    setActiveCallInfo(held.info);
+    setActiveCallSdkState(null);
+    setMuted(false);
+  }, []); // all from refs — no state deps
 
   const hangup = useCallback(() => {
     clearTimeout(callTimeoutRef.current);
     callTimeoutRef.current = null;
-    // Mark user-initiated so the terminal handler doesn't show "Call ended" toast
     userHangupRef.current = true;
-
-    // Use the ref (always current) — reading activeCall state risks a stale
-    // closure if the SDK replaced the call object between renders.
     const callToHang      = activeCallRef.current;
     activeCallRef.current = null;
     wasConnectedRef.current = false;
-
     clearCallState();
     answeredCallIdRef.current = null;
-
     if (callToHang) {
       try { callToHang.hangup(); } catch (e) { console.warn('[Telnyx] hangup failed', e); }
     }
-    // Always release mic tracks — even if the SDK call object was already gone
-    // or hangup() threw, we own the getUserMedia stream and must close it.
     releaseLocalMedia(callToHang);
-  }, [clearCallState, releaseLocalMedia]); // No longer depends on activeCall state — stale-closure-safe
+    // H-11: auto-restore held call when user deliberately hangs up the active call
+    const held = heldCallRef.current;
+    if (held) {
+      try { held.call.unhold(); } catch (_) {}
+      heldCallRef.current   = null;
+      activeCallRef.current = held.call;
+      setActiveCall(held.call);
+      setActiveCallInfo(held.info);
+      setHeldCallInfo(null);
+    }
+  }, [clearCallState, releaseLocalMedia]);
 
   const toggleMute = useCallback(() => {
     const call = activeCallRef.current;
@@ -542,7 +607,7 @@ export function TelnyxProvider({ children }) {
 
   const sendDigit = useCallback(
     (digit) => { if (activeCallRef.current) activeCallRef.current.dtmf(digit); },
-    [] // ref is always current — no deps needed
+    []
   );
 
   const toggleRecording = useCallback(async () => {
@@ -572,16 +637,19 @@ export function TelnyxProvider({ children }) {
   const value = {
     deviceReady,
     deviceError,
-    incomingCall,
+    incomingCalls,
     activeCall,
     activeCallInfo,
     activeCallSdkState,
+    heldCallInfo,
     callNotification,
     muted,
     recording,
     makeCall,
     acceptIncoming,
     rejectIncoming,
+    acceptAndHold,
+    unholdCall,
     hangup,
     toggleMute,
     toggleRecording,

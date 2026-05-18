@@ -19,6 +19,8 @@ import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -219,6 +221,8 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/privacypolicy" element={<PrivacyPage />} />
+        <Route path="/termsandconditions" element={<TermsPage />} />
         <Route
           path="/*"
           element={

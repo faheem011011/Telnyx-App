@@ -7,12 +7,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AuditLog, PhoneNumber, User
+from app.models import AuditLog, Department as DeptModel, PhoneNumber, User
 from app.services.email import send_verification_email
 from app.services.verification import issue_verification_token, make_verification_url
 from app.schemas import (
     AuditLogOut,
-    DEPARTMENTS,
+    DepartmentCreate,
+    DepartmentOut,
+    DepartmentUpdate,
     NumberAssignRequest,
     NumberPurchaseRequest,
     NumberSearchResult,
@@ -41,9 +43,120 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 # Departments
 # ============================================================
 
-@router.get("/departments", response_model=list[str])
-def list_departments(_: User = Depends(require_admin)) -> list[str]:
-    return list(DEPARTMENTS)
+@router.get("/departments", response_model=list[DepartmentOut])
+def list_departments(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[DepartmentOut]:
+    return db.query(DeptModel).order_by(DeptModel.name).all()
+
+
+@router.post("/departments", response_model=DepartmentOut, status_code=status.HTTP_201_CREATED)
+def create_department(
+    request: Request,
+    payload: DepartmentCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> DepartmentOut:
+    if db.query(DeptModel).filter(DeptModel.name == payload.name).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A department with that name already exists.")
+    dept = DeptModel(name=payload.name)
+    db.add(dept)
+    db.flush()
+    log_audit(
+        db, current_admin,
+        action="department.create",
+        resource_type="department",
+        resource_id=str(dept.id),
+        detail={"name": dept.name},
+        ip_address=get_client_ip(request),
+    )
+    db.commit()
+    db.refresh(dept)
+    return dept
+
+
+@router.patch("/departments/{dept_id}", response_model=DepartmentOut)
+def update_department(
+    request: Request,
+    dept_id: int,
+    payload: DepartmentUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> DepartmentOut:
+    dept = db.query(DeptModel).filter(DeptModel.id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found.")
+
+    # Block deactivation if users are linked
+    if payload.is_active is False and dept.is_active:
+        user_count = (
+            db.query(User)
+            .filter(User.department == dept.name, User.deleted_at.is_(None))
+            .count()
+        )
+        if user_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot deactivate: {user_count} user(s) are currently assigned to this department.",
+            )
+
+    changes: dict = {}
+    if payload.name is not None and payload.name != dept.name:
+        if db.query(DeptModel).filter(DeptModel.name == payload.name, DeptModel.id != dept_id).first():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A department with that name already exists.")
+        # Keep users' department strings in sync with the rename
+        db.query(User).filter(User.department == dept.name).update({"department": payload.name})
+        changes["name"] = {"from": dept.name, "to": payload.name}
+        dept.name = payload.name
+    if payload.is_active is not None and payload.is_active != dept.is_active:
+        changes["is_active"] = {"from": dept.is_active, "to": payload.is_active}
+        dept.is_active = payload.is_active
+
+    if changes:
+        log_audit(
+            db, current_admin,
+            action="department.update",
+            resource_type="department",
+            resource_id=str(dept_id),
+            detail=changes,
+            ip_address=get_client_ip(request),
+        )
+    db.commit()
+    db.refresh(dept)
+    return dept
+
+
+@router.delete("/departments/{dept_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_department(
+    request: Request,
+    dept_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> None:
+    dept = db.query(DeptModel).filter(DeptModel.id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found.")
+    user_count = (
+        db.query(User)
+        .filter(User.department == dept.name, User.deleted_at.is_(None))
+        .count()
+    )
+    if user_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot delete: {user_count} user(s) are currently assigned to this department.",
+        )
+    log_audit(
+        db, current_admin,
+        action="department.delete",
+        resource_type="department",
+        resource_id=str(dept_id),
+        detail={"name": dept.name},
+        ip_address=get_client_ip(request),
+    )
+    db.delete(dept)
+    db.commit()
 
 
 # ============================================================
@@ -87,6 +200,16 @@ def create_user(
         # The old row is preserved for audit purposes with a non-reusable address.
         existing.email = f"__deleted_{existing.id}__{existing.email}"
         db.flush()
+
+    dept = db.query(DeptModel).filter(
+        DeptModel.name == payload.department,
+        DeptModel.is_active.is_(True),
+    ).first()
+    if not dept:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Department does not exist or is inactive.",
+        )
 
     user = User(
         email=payload.email,
@@ -148,14 +271,20 @@ def update_user(
         changes["role"] = {"from": user.role, "to": payload.role}
         user.role = payload.role
     if payload.department is not None and payload.department != user.department:
+        dept = db.query(DeptModel).filter(
+            DeptModel.name == payload.department,
+            DeptModel.is_active.is_(True),
+        ).first()
+        if not dept:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Department does not exist or is inactive.",
+            )
         changes["department"] = {"from": user.department, "to": payload.department}
         user.department = payload.department
     if payload.is_active is not None and payload.is_active != user.is_active:
         changes["is_active"] = {"from": user.is_active, "to": payload.is_active}
         user.is_active = payload.is_active
-    if payload.phone_number is not None:
-        changes["phone_number"] = {"from": user.phone_number, "to": payload.phone_number or None}
-        user.phone_number = payload.phone_number or None
     if payload.password is not None:
         changes["password"] = "reset"
         user.hashed_password = hash_password(payload.password)
@@ -188,15 +317,30 @@ def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot delete your own account",
         )
-    user = db.query(User).filter(User.id == user_id).first()
+    # C-05: lock the row so concurrent delete requests for the same user_id
+    # serialize here rather than both reading stale state simultaneously.
+    user = db.query(User).filter(User.id == user_id).with_for_update().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # C-05: idempotency — a second delete (e.g. admin retry) is a no-op.
+    if user.deleted_at:
+        return
+
+    # H-03: unassign phone numbers before soft-delete so they become available again.
+    # ondelete="SET NULL" only fires on hard DELETE, not soft-delete.
+    unassigned_numbers = []
+    for pn in db.query(PhoneNumber).filter(PhoneNumber.assigned_to_user_id == user_id).all():
+        unassigned_numbers.append(pn.phone_number)
+        pn.assigned_to_user_id = None
+    user.phone_number = None
 
     deleted_info = {
         "email": user.email,
         "name": user.name,
         "role": user.role,
         "action": "soft_delete",
+        "unassigned_numbers": unassigned_numbers,
     }
 
     user.is_active = False
@@ -472,8 +616,7 @@ def assign_number(
         cleared_user_ids.append(stale.id)
 
     tn.assigned_to_user_id = payload.user_id
-    if not user.phone_number:
-        user.phone_number = tn.phone_number
+    user.phone_number = tn.phone_number  # H-01: always sync, not guarded by if-not
 
     audit_detail = {"assigned_to_user_id": user.id, "assigned_to_email": user.email}
     if cleared_user_ids:

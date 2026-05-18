@@ -1,13 +1,14 @@
 """Call history + Telnyx voice token endpoints."""
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import or_, desc, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Call, Contact, User
 from app.schemas import CallOut, CallUpdate, ContactOut, RecordingControlRequest, VoiceTokenResponse
+from app.services.audit import get_client_ip, log_audit
 from app.services.deps import get_current_user
 from app.services.telnyx_service import (
     TelnyxApiError,
@@ -256,6 +257,7 @@ def _call_for_recording(db: Session, user_id: int, call_sid: str | None) -> Call
 
 @router.post("/recording/start", status_code=status.HTTP_204_NO_CONTENT)
 def start_recording(
+    request: Request,
     payload: RecordingControlRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -274,10 +276,19 @@ def start_recording(
             status_code=502,
             detail="Recording service unavailable. Please try again or contact support.",
         )
+    log_audit(
+        db, current_user,
+        action="call.recording.start",
+        resource_type="call",
+        resource_id=call.id,
+        detail={"call_sid": call.call_sid},
+        ip_address=get_client_ip(request),
+    )
 
 
 @router.post("/recording/stop", status_code=status.HTTP_204_NO_CONTENT)
 def stop_recording(
+    request: Request,
     payload: RecordingControlRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -292,6 +303,14 @@ def stop_recording(
             status_code=502,
             detail="Recording service unavailable. Please try again or contact support.",
         )
+    log_audit(
+        db, current_user,
+        action="call.recording.stop",
+        resource_type="call",
+        resource_id=call.id,
+        detail={"call_sid": call.call_sid},
+        ip_address=get_client_ip(request),
+    )
 
 
 @router.get("/{call_id}/voicemail-url")

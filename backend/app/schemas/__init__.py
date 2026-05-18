@@ -1,6 +1,5 @@
 """Pydantic schemas for API input/output."""
 from datetime import datetime
-from typing import Literal
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 
 
@@ -17,14 +16,30 @@ def _validate_password(v: str) -> str:
     return v
 
 
-# L-03: enforced via the ``Department`` Literal below.
-DEPARTMENTS = ["Data Team", "HR Team", "BD Team", "AI/ML Team", "DevOps Team"]
 ROLES = ["admin", "user"]
-
-Department = Literal["Data Team", "HR Team", "BD Team", "AI/ML Team", "DevOps Team"]
 
 # L-04: existing users with shorter passwords keep their hashes; only NEW
 # passwords going forward must be ≥12 characters.
+
+# ============================================================
+# Department
+# ============================================================
+class DepartmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    is_active: bool
+    created_at: datetime
+
+
+class DepartmentCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+
+
+class DepartmentUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=64)
+    is_active: bool | None = None
 
 # ============================================================
 # Auth
@@ -128,7 +143,7 @@ class UserAdminCreate(BaseModel):
         description="Password (12-72 characters)",
     )
     role: str = Field("user", pattern="^(admin|user)$")
-    department: Department
+    department: str = Field(..., min_length=1, max_length=64)
 
     @field_validator("password")
     @classmethod
@@ -139,9 +154,8 @@ class UserAdminCreate(BaseModel):
 class UserAdminUpdate(BaseModel):
     name: str | None = None
     role: str | None = Field(None, pattern="^(admin|user)$")
-    department: Department | None = None
+    department: str | None = Field(None, min_length=1, max_length=64)
     is_active: bool | None = None
-    phone_number: str | None = None
     password: str | None = Field(
         None,
         min_length=12,

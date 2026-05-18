@@ -497,6 +497,7 @@ def get_analytics(
         "top_area_codes":          top_area_codes,
         "recent_messages":         recent_messages,
         "contacts_overview":       contacts_overview,
+        "truncated":               len(call_rows) >= _MAX_ROWS,
     }
 
 

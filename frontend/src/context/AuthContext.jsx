@@ -38,7 +38,21 @@ export function AuthProvider({ children }) {
     const id = setInterval(async () => {
       try {
         const updated = await authApi.me();
-        setUser(updated); // keeps role / profile data fresh
+        // H-08: only replace the reference when data actually changed so
+        // TelnyxContext's WebRTC useEffect (which depends on user) does not
+        // tear down and re-initialize the client — dropping active calls.
+        setUser(prev => {
+          if (!prev) return updated;
+          const changed =
+            prev.id !== updated.id ||
+            prev.role !== updated.role ||
+            prev.is_active !== updated.is_active ||
+            prev.email_verified !== updated.email_verified ||
+            prev.phone_number !== updated.phone_number ||
+            prev.name !== updated.name ||
+            prev.department !== updated.department;
+          return changed ? updated : prev;
+        });
       } catch {
         // 401 interceptor handles token clear + redirect
       }

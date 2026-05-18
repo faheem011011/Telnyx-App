@@ -252,7 +252,7 @@ function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmi
 // ─── Users Tab ────────────────────────────────────────────────────────────────
 
 function UsersTab({ users, loading, onRefresh }) {
-  const { departments } = useDepartments();
+  const { departmentNames: departments } = useDepartments();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -604,7 +604,9 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
   const [purchasing, setPurchasing] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [actionError, setActionError] = useState(null);
-  const [pendingAssign, setPendingAssign] = useState(null); // { numberId, userId, phone, userName }
+  const [pendingAssign,   setPendingAssign]   = useState(null); // { numberId, userId, phone, userName }
+  const [pendingRelease,  setPendingRelease]  = useState(null); // number row object
+  const [releaseLoading,  setReleaseLoading]  = useState(false);
 
   const handleSearch = async () => {
     setSearching(true);
@@ -662,13 +664,17 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
     }
   };
 
-  const handleRelease = async (numberId) => {
-    if (!window.confirm('Release this number from your Telnyx account? This cannot be undone.')) return;
+  const confirmRelease = async () => {
+    setReleaseLoading(true);
     try {
-      await adminApi.releaseNumber(numberId);
+      await adminApi.releaseNumber(pendingRelease.id);
+      setPendingRelease(null);
       onRefresh();
     } catch (err) {
       setActionError(err.response?.data?.detail || 'Release failed');
+      setPendingRelease(null);
+    } finally {
+      setReleaseLoading(false);
     }
   };
 
@@ -748,6 +754,40 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
           </div>
         )}
       </div>
+
+      {pendingRelease && (
+        <Modal title="Release Number" onClose={() => !releaseLoading && setPendingRelease(null)}>
+          <div className="flex flex-col items-center text-center mb-5 gap-3">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-6 h-6 text-red-500" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm mb-1">{formatPhone(pendingRelease.phone_number)}</p>
+              <p className="text-sm text-muted leading-relaxed">
+                This will permanently release this number from your Telnyx account.
+                Any calls or messages routed to it will stop working immediately.
+              </p>
+              <p className="text-sm font-semibold mt-2">This cannot be undone.</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPendingRelease(null)}
+              disabled={releaseLoading}
+              className="flex-1 btn-ghost surface-tertiary py-2.5 text-sm disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmRelease}
+              disabled={releaseLoading}
+              className="flex-1 py-2.5 text-sm font-medium rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-60"
+            >
+              {releaseLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Release Number'}
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {pendingAssign && (
         <Modal title="Confirm Assignment" onClose={() => setPendingAssign(null)}>
@@ -852,7 +892,7 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
                     </td>
                     <td className="px-4 py-3">
                       <button
-                        onClick={() => handleRelease(n.id)}
+                        onClick={() => { setPendingRelease(n); setActionError(null); }}
                         title="Release number"
                         className="p-1.5 rounded-lg hover:surface-tertiary transition-colors text-muted hover:text-red-500"
                       >
@@ -870,11 +910,278 @@ function NumbersTab({ numbers, users, loading, onRefresh }) {
   );
 }
 
+// ─── DepartmentsTab ──────────────────────────────────────────────────────────
+
+function DepartmentsTab() {
+  const { departments, loading, refetch } = useDepartments();
+  const [showCreate, setShowCreate]   = useState(false);
+  const [newName, setNewName]         = useState('');
+  const [editDept, setEditDept]       = useState(null);
+  const [deleteDept, setDeleteDept]   = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const [successMsg, setSuccessMsg]   = useState(null);
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await adminApi.createDepartment({ name: newName.trim() });
+      setNewName('');
+      setShowCreate(false);
+      showSuccess(`Department "${newName.trim()}" created.`);
+      refetch();
+    } catch (err) {
+      setActionError(formatApiError(err, 'Failed to create department'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!editDept) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await adminApi.updateDepartment(editDept.id, {
+        name: editDept.name,
+        is_active: editDept.is_active,
+      });
+      setEditDept(null);
+      showSuccess('Department updated.');
+      refetch();
+    } catch (err) {
+      setActionError(formatApiError(err, 'Failed to update department'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteDept) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await adminApi.deleteDepartment(deleteDept.id);
+      setDeleteDept(null);
+      showSuccess(`Department "${deleteDept.name}" deleted.`);
+      refetch();
+    } catch (err) {
+      setActionError(formatApiError(err, 'Failed to delete department'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      {successMsg && (
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm bg-green-500/10 text-green-700 border border-green-500/20 flex items-center gap-2">
+          <Check className="w-4 h-4 flex-shrink-0" />
+          {successMsg}
+          <button onClick={() => setSuccessMsg(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+      {actionError && !editDept && !deleteDept && (
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm bg-red-500/10 text-red-500 border border-red-500/20 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {actionError}
+          <button onClick={() => setActionError(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-sm text-muted">
+          Departments with active users cannot be deleted or deactivated.
+        </p>
+        <button
+          onClick={() => { setShowCreate(true); setNewName(''); setActionError(null); }}
+          className="btn-primary py-2.5 px-4 text-sm whitespace-nowrap"
+        >
+          <Plus className="w-4 h-4" />
+          Add Department
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-muted" />
+        </div>
+      ) : (
+        <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgb(var(--border-primary))' }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ background: 'rgb(var(--bg-tertiary))' }}>
+                {['Department Name', 'Status', 'Actions'].map((h) => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {departments.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="text-center py-12 text-muted text-sm">
+                    No departments found. Add one above.
+                  </td>
+                </tr>
+              ) : departments.map((d) => (
+                <tr
+                  key={d.id}
+                  className="border-t transition-colors hover:surface-secondary"
+                  style={{ borderColor: 'rgb(var(--border-primary))' }}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-muted" />
+                      <span className="font-medium">{d.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge active={d.is_active} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setEditDept({ ...d }); setActionError(null); }}
+                        title="Edit department"
+                        className="p-1.5 rounded-lg hover:surface-tertiary transition-colors text-muted hover:text-primary"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => { setDeleteDept(d); setActionError(null); }}
+                        title="Delete department"
+                        className="p-1.5 rounded-lg hover:surface-tertiary transition-colors text-muted hover:text-red-500"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Create modal */}
+      {showCreate && (
+        <Modal title="Add Department" onClose={() => { setShowCreate(false); setActionError(null); }}>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <FormField label="Department Name" htmlFor="dept-name">
+              <input
+                id="dept-name"
+                required
+                autoFocus
+                className="input"
+                placeholder="e.g. Engineering"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+            </FormField>
+            {actionError && (
+              <div className="px-3 py-2.5 rounded-lg text-sm bg-red-500/10 text-red-500 border border-red-500/20 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> {actionError}
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={() => { setShowCreate(false); setActionError(null); }} className="flex-1 btn-ghost surface-tertiary py-2.5 text-sm">Cancel</button>
+              <button type="submit" disabled={actionLoading || !newName.trim()} className="flex-1 btn-primary py-2.5 text-sm disabled:opacity-60">
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Create'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Edit modal */}
+      {editDept && (
+        <Modal title="Edit Department" onClose={() => { setEditDept(null); setActionError(null); }}>
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <FormField label="Department Name" htmlFor="edit-dept-name">
+              <input
+                id="edit-dept-name"
+                required
+                className="input"
+                value={editDept.name}
+                onChange={(e) => setEditDept((d) => ({ ...d, name: e.target.value }))}
+              />
+            </FormField>
+            <div
+              className="flex items-center justify-between py-2.5 px-3 rounded-lg"
+              style={{ background: 'rgb(var(--bg-tertiary))' }}
+            >
+              <span className="text-sm font-medium">Active</span>
+              <button
+                type="button"
+                onClick={() => setEditDept((d) => ({ ...d, is_active: !d.is_active }))}
+                className={`relative w-10 h-5 rounded-full transition-colors ${editDept.is_active ? 'bg-brand-600' : 'bg-zinc-300'}`}
+                style={{ background: editDept.is_active ? '#1454F6' : undefined }}
+              >
+                <span
+                  className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                  style={{ transform: editDept.is_active ? 'translateX(20px)' : 'translateX(2px)' }}
+                />
+              </button>
+            </div>
+            {actionError && (
+              <div className="px-3 py-2.5 rounded-lg text-sm bg-red-500/10 text-red-500 border border-red-500/20 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> {actionError}
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={() => { setEditDept(null); setActionError(null); }} className="flex-1 btn-ghost surface-tertiary py-2.5 text-sm">Cancel</button>
+              <button type="submit" disabled={actionLoading || !editDept.name.trim()} className="flex-1 btn-primary py-2.5 text-sm disabled:opacity-60">
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Delete modal */}
+      {deleteDept && (
+        <Modal title="Delete Department" onClose={() => { setDeleteDept(null); setActionError(null); }}>
+          <p className="text-sm text-muted mb-5">
+            Delete <strong>{deleteDept.name}</strong>? This cannot be undone.
+            Departments with active users cannot be deleted.
+          </p>
+          {actionError && (
+            <div className="mb-4 px-3 py-2.5 rounded-lg text-sm bg-red-500/10 text-red-500 border border-red-500/20">
+              {actionError}
+            </div>
+          )}
+          <div className="flex gap-3">
+            <button onClick={() => { setDeleteDept(null); setActionError(null); }} className="flex-1 btn-ghost surface-tertiary py-2.5 text-sm">Cancel</button>
+            <button
+              onClick={handleDelete}
+              disabled={actionLoading}
+              className="flex-1 py-2.5 text-sm font-medium rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-60"
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ─── AuditLogsTab ────────────────────────────────────────────────────────────
 
 const AUDIT_ACTIONS = [
   'user.create', 'user.update', 'user.delete', 'user.resend_verification',
   'number.sync', 'number.purchase', 'number.assign', 'number.unassign', 'number.release',
+  'department.create', 'department.update', 'department.delete',
+  'call.recording.start', 'call.recording.stop',
 ];
 
 const ACTION_COLORS = {
@@ -887,6 +1194,11 @@ const ACTION_COLORS = {
   'number.assign':            { bg: 'bg-indigo-500/10', text: 'text-indigo-600'},
   'number.unassign':          { bg: 'bg-orange-500/10', text: 'text-orange-600'},
   'number.release':           { bg: 'bg-red-500/10',    text: 'text-red-500'   },
+  'department.create':        { bg: 'bg-green-500/10',  text: 'text-green-600' },
+  'department.update':        { bg: 'bg-blue-500/10',   text: 'text-blue-600'  },
+  'department.delete':        { bg: 'bg-red-500/10',    text: 'text-red-500'   },
+  'call.recording.start':     { bg: 'bg-rose-500/10',   text: 'text-rose-600'  },
+  'call.recording.stop':      { bg: 'bg-slate-500/10',  text: 'text-slate-600' },
 };
 
 function ActionBadge({ action }) {
@@ -1112,9 +1424,10 @@ export default function AdminPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const TABS = [
-    { id: 'users',   label: 'Users',         Icon: Users,         count: users.length },
-    { id: 'numbers', label: 'Phone Numbers',  Icon: Phone,         count: numbers.length },
-    { id: 'audit',   label: 'Audit Logs',     Icon: ClipboardList, count: null },
+    { id: 'users',       label: 'Users',         Icon: Users,         count: users.length },
+    { id: 'departments', label: 'Departments',    Icon: Building2,     count: null },
+    { id: 'numbers',     label: 'Phone Numbers',  Icon: Phone,         count: numbers.length },
+    { id: 'audit',       label: 'Audit Logs',     Icon: ClipboardList, count: null },
   ];
 
   return (
@@ -1166,15 +1479,10 @@ export default function AdminPage() {
         )}
 
         {/* Tab content */}
-        {tab === 'users' && (
-          <UsersTab users={users} loading={loading} onRefresh={loadData} />
-        )}
-        {tab === 'numbers' && (
-          <NumbersTab numbers={numbers} users={users} loading={loading} onRefresh={loadData} />
-        )}
-        {tab === 'audit' && (
-          <AuditLogsTab />
-        )}
+        {tab === 'users'       && <UsersTab users={users} loading={loading} onRefresh={loadData} />}
+        {tab === 'departments' && <DepartmentsTab />}
+        {tab === 'numbers'     && <NumbersTab numbers={numbers} users={users} loading={loading} onRefresh={loadData} />}
+        {tab === 'audit'       && <AuditLogsTab />}
       </div>
     </div>
   );

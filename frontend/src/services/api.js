@@ -134,7 +134,10 @@ export const analyticsApi = {
 // ============================================================
 export const adminApi = {
   // Departments
-  listDepartments: () => api.get('/api/admin/departments').then((r) => r.data),
+  listDepartments:    ()        => api.get('/api/admin/departments').then((r) => r.data),
+  createDepartment:   (data)    => api.post('/api/admin/departments', data).then((r) => r.data),
+  updateDepartment:   (id, data) => api.patch(`/api/admin/departments/${id}`, data).then((r) => r.data),
+  deleteDepartment:   (id)      => api.delete(`/api/admin/departments/${id}`),
 
   // Audit logs
   listAuditLogs: (params = {}) => api.get('/api/admin/audit-logs', { params }).then((r) => r.data),

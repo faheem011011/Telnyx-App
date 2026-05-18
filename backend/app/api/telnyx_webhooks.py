@@ -314,6 +314,9 @@ def _claim_event(db: Session, event_id: str, event_type: str) -> bool:
     """Returns True if this is the first time we've seen this event id; False if duplicate.
 
     Inserts a row immediately so concurrent retries hit the unique constraint.
+    The row is flushed into the caller's open transaction rather than committed
+    immediately — the caller's own db.commit() then persists the WebhookEvent
+    together with all subsequent writes atomically (C-04 fix).
     Pass an empty event_id when no usable identifier exists — in that case we
     cannot dedupe, so we allow the event through.
     """
@@ -321,7 +324,7 @@ def _claim_event(db: Session, event_id: str, event_type: str) -> bool:
         return True  # Cannot dedupe; allow processing.
     try:
         db.add(WebhookEvent(telnyx_event_id=event_id, event_type=event_type))
-        db.commit()
+        db.flush()  # C-04: stays in caller's transaction, not a premature commit
         return True
     except IntegrityError:
         db.rollback()
@@ -621,20 +624,23 @@ def _v2_handle_hangup(db: Session, payload: dict, call_control_id: str) -> Respo
         call.ended_at = _now()
 
     hangup_cause = payload.get("hangup_cause") or ""
-    # Map Telnyx hangup_cause to our coarse status set.
-    if hangup_cause == "normal_clearing":
-        # Treat as completed only if the call was actually answered.
-        call.status = "completed" if call.status == "in-progress" else "missed"
-    elif hangup_cause in ("call_rejected", "user_busy", "callee_busy"):
-        call.status = "busy"
-    elif hangup_cause in ("no_answer", "no_user_response"):
-        call.status = "no-answer"
-    elif hangup_cause in ("originator_cancel",):
-        call.status = "canceled"
-    else:
-        # Default — keep current unless still 'initiated'/'ringing'
-        if call.status in ("initiated", "ringing", None):
-            call.status = "failed"
+    # H-04: skip status update if call already reached a terminal state.
+    # A late hangup event must not overwrite a completed/missed/busy status.
+    if call.status not in _TERMINAL:
+        # Map Telnyx hangup_cause to our coarse status set.
+        if hangup_cause == "normal_clearing":
+            # Treat as completed only if the call was actually answered.
+            call.status = "completed" if call.status == "in-progress" else "missed"
+        elif hangup_cause in ("call_rejected", "user_busy", "callee_busy"):
+            call.status = "busy"
+        elif hangup_cause in ("no_answer", "no_user_response"):
+            call.status = "no-answer"
+        elif hangup_cause in ("originator_cancel",):
+            call.status = "canceled"
+        else:
+            # Default — keep current unless still 'initiated'/'ringing'
+            if call.status in ("initiated", "ringing", None):
+                call.status = "failed"
 
     duration_raw = payload.get("call_duration_secs")
     try:
