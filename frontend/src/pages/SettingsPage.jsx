@@ -104,7 +104,7 @@ export default function SettingsPage() {
 
 // ─── Admin self-editor: change own department ───────────────────────────────
 function DepartmentEditor({ user, onSaved }) {
-  const { departments } = useDepartments();
+  const { departmentNames } = useDepartments();
   const [value, setValue] = useState(user?.department || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -120,7 +120,12 @@ function DepartmentEditor({ user, onSaved }) {
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2000);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to update department.');
+      const detail = err?.response?.data?.detail;
+      setError(
+        typeof detail === 'string' ? detail :
+        Array.isArray(detail) ? detail.map((d) => d?.msg || String(d)).join('; ') :
+        'Failed to update department.'
+      );
     } finally {
       setSaving(false);
     }
@@ -138,7 +143,7 @@ function DepartmentEditor({ user, onSaved }) {
             disabled={saving}
           >
             <option value="" disabled>Select a team</option>
-            {departments.map((d) => (
+            {departmentNames.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
@@ -206,7 +211,8 @@ function SelfNumberEditor({ user, onSaved }) {
       setPicked('');
       flash();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to assign number.');
+      const d = err?.response?.data?.detail;
+      setError(typeof d === 'string' ? d : Array.isArray(d) ? d.map((x) => x?.msg || String(x)).join('; ') : 'Failed to assign number.');
     } finally {
       setBusy(false);
     }
@@ -222,7 +228,8 @@ function SelfNumberEditor({ user, onSaved }) {
       await onSaved?.();
       flash();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to unassign number.');
+      const d = err?.response?.data?.detail;
+      setError(typeof d === 'string' ? d : Array.isArray(d) ? d.map((x) => x?.msg || String(x)).join('; ') : 'Failed to unassign number.');
     } finally {
       setBusy(false);
     }
@@ -309,7 +316,8 @@ function NameField({ user, onSaved }) {
       await onSaved?.();
       setEditing(false);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to update name.');
+      const d = err?.response?.data?.detail;
+      setError(typeof d === 'string' ? d : Array.isArray(d) ? d.map((x) => x?.msg || String(x)).join('; ') : 'Failed to update name.');
     } finally {
       setSaving(false);
     }
@@ -406,7 +414,8 @@ function ChangePasswordSection({ onChanged }) {
       // invalid. Sign the user out so the next request doesn't 401.
       setTimeout(() => onChanged?.(), 1200);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Could not change password.');
+      const d = err?.response?.data?.detail;
+      setError(typeof d === 'string' ? d : Array.isArray(d) ? d.map((x) => x?.msg || String(x)).join('; ') : 'Could not change password.');
     } finally {
       setBusy(false);
     }
