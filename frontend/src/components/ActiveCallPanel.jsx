@@ -15,11 +15,6 @@ function ControlBtn({ onClick, active, activeColor = '#2563eb', children, title,
     transition: 'all 0.15s',
     boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
   };
-  const idle = {
-    background: 'white',
-    border: '1.5px solid rgba(226,232,240,0.9)',
-    color: '#64748b',
-  };
   const activeStyle = {
     background: active ? `rgba(${activeColor === '#ef4444' ? '239,68,68' : '37,99,235'},0.1)` : 'white',
     border: active
@@ -57,9 +52,14 @@ function ControlBtn({ onClick, active, activeColor = '#2563eb', children, title,
 }
 
 export default function ActiveCallPanel() {
-  const { activeCall, activeCallInfo, activeCallSdkState, muted, toggleMute, hangup, sendDigit, recording, toggleRecording } = useTelnyx();
-  const [elapsed, setElapsed]       = useState(0);
-  const [showKeypad, setShowKeypad] = useState(false);
+  const {
+    activeCall, activeCallInfo, activeCallSdkState,
+    muted, toggleMute, hangup, sendDigit, recording, toggleRecording,
+    heldCallInfo, unholdCall,
+  } = useTelnyx();
+
+  const [elapsed,     setElapsed]     = useState(0);
+  const [showKeypad,  setShowKeypad]  = useState(false);
   const containerRef = useRef(null);
   useFocusTrap(containerRef);
 
@@ -71,23 +71,25 @@ export default function ActiveCallPanel() {
     return () => clearInterval(id);
   }, [activeCallInfo]);
 
-  if (!activeCall || !activeCallInfo) return null;
+  // Show panel whenever there is an active call OR a held call
+  if (!activeCall && !activeCallInfo && !heldCallInfo) return null;
 
-  const { number, direction, connected } = activeCallInfo;
-  const statusLabel = connected
-    ? formatDuration(elapsed)
-    : activeCallSdkState === 'ringing' && direction === 'outbound'
-      ? 'Ringing…'
-      : direction === 'outbound'
-        ? 'Calling…'
-        : 'Connecting…';
+  const { number, direction, connected } = activeCallInfo || {};
+  const statusLabel = !activeCallInfo ? '' :
+    connected
+      ? formatDuration(elapsed)
+      : activeCallSdkState === 'ringing' && direction === 'outbound'
+        ? 'Ringing…'
+        : direction === 'outbound'
+          ? 'Calling…'
+          : 'Connecting…';
 
   return (
     <div
       ref={containerRef}
       role="dialog"
       aria-modal="true"
-      aria-label={`Active call with ${formatPhone(number)}`}
+      aria-label={activeCallInfo ? `Active call with ${formatPhone(number)}` : 'Call on hold'}
       className="fixed bottom-6 right-6 z-40 animate-slide-up"
       style={{ width: 296 }}
     >
@@ -106,142 +108,199 @@ export default function ActiveCallPanel() {
           overflow: 'hidden',
         }}
       >
-        {/* Blue header */}
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
-            padding: '12px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 11,
-          }}
-        >
-          <Avatar name={number} seed={number} size="sm" />
-          <div style={{ flex: 1, minWidth: 0 }}>
+        {/* ── Active call section ─────────────────────────────────────────── */}
+        {activeCall && activeCallInfo && (
+          <>
+            {/* Blue header */}
             <div
-              className="font-display"
-              style={{ fontWeight: 700, fontSize: 14, color: 'white', letterSpacing: '0.01em' }}
+              style={{
+                background: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+              }}
             >
-              {formatPhone(number)}
-            </div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.72)', marginTop: 1 }}>
-              {direction === 'inbound' ? 'Inbound' : 'On call'} · {statusLabel}
-            </div>
-          </div>
-          {/* Live indicator */}
-          <span
-            style={{
-              width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-              background: connected ? '#4ade80' : '#fbbf24',
-              boxShadow: connected ? '0 0 7px rgba(74,222,128,1)' : '0 0 7px rgba(251,191,36,1)',
-            }}
-          />
-        </div>
-
-        {/* Controls */}
-        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
-          {/* Mute */}
-          <ControlBtn
-            onClick={toggleMute}
-            active={muted}
-            activeColor="#ef4444"
-            title={muted ? 'Unmute' : 'Mute'}
-          >
-            {muted ? <MicOff size={19} /> : <Mic size={19} />}
-          </ControlBtn>
-
-          {/* Hang up */}
-          <button
-            onClick={hangup}
-            title="Hang up"
-            style={{
-              width: 54, height: 54, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-              border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white',
-              boxShadow: '0 4px 18px rgba(239,68,68,0.45)',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)';
-              e.currentTarget.style.boxShadow = '0 6px 22px rgba(239,68,68,0.58)';
-              e.currentTarget.style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-              e.currentTarget.style.boxShadow = '0 4px 18px rgba(239,68,68,0.45)';
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-          >
-            <PhoneOff size={21} />
-          </button>
-
-          {/* Record toggle */}
-          <ControlBtn
-            onClick={toggleRecording}
-            active={recording}
-            activeColor="#ef4444"
-            title={recording ? 'Stop recording' : 'Record call'}
-          >
-            {recording
-              ? <Square size={15} fill="#ef4444" />
-              : <Circle size={19} />}
-          </ControlBtn>
-
-          {/* Keypad toggle */}
-          <ControlBtn
-            onClick={() => setShowKeypad((s) => !s)}
-            active={showKeypad}
-            title="Keypad"
-          >
-            <Grid3x3 size={19} />
-          </ControlBtn>
-        </div>
-
-        {/* DTMF keypad */}
-        {showKeypad && (
-          <div
-            style={{
-              padding: '8px 12px 12px',
-              borderTop: '1px solid rgba(226,232,240,0.5)',
-              background: 'rgba(239,246,255,0.45)',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 6,
-            }}
-          >
-            {KEYS.map((k) => (
-              <button
-                key={k}
-                onClick={() => sendDigit(k)}
+              <Avatar name={number} seed={number} size="sm" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  className="font-display"
+                  style={{ fontWeight: 700, fontSize: 14, color: 'white', letterSpacing: '0.01em' }}
+                >
+                  {formatPhone(number)}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.72)', marginTop: 1 }}>
+                  {direction === 'inbound' ? 'Inbound' : 'On call'} · {statusLabel}
+                </div>
+              </div>
+              {/* Live indicator */}
+              <span
                 style={{
-                  padding: '9px 0',
-                  borderRadius: 9,
-                  background: 'white',
-                  border: '1.5px solid rgba(226,232,240,0.9)',
-                  cursor: 'pointer',
-                  fontWeight: 600, fontSize: 15,
-                  color: '#1e40af',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                  transition: 'all 0.1s',
+                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                  background: connected ? '#4ade80' : '#fbbf24',
+                  boxShadow: connected ? '0 0 7px rgba(74,222,128,1)' : '0 0 7px rgba(251,191,36,1)',
+                }}
+              />
+            </div>
+
+            {/* Controls */}
+            <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
+              {/* Mute */}
+              <ControlBtn
+                onClick={toggleMute}
+                active={muted}
+                activeColor="#ef4444"
+                title={muted ? 'Unmute' : 'Mute'}
+              >
+                {muted ? <MicOff size={19} /> : <Mic size={19} />}
+              </ControlBtn>
+
+              {/* Hang up */}
+              <button
+                onClick={hangup}
+                title="Hang up"
+                style={{
+                  width: 54, height: 54, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white',
+                  boxShadow: '0 4px 18px rgba(239,68,68,0.45)',
+                  transition: 'all 0.15s',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#eff6ff';
-                  e.currentTarget.style.border = '1.5px solid #93c5fd';
-                  e.currentTarget.style.color = '#2563eb';
-                  e.currentTarget.style.boxShadow = '0 3px 10px rgba(59,130,246,0.16)';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)';
+                  e.currentTarget.style.boxShadow = '0 6px 22px rgba(239,68,68,0.58)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'white';
-                  e.currentTarget.style.border = '1.5px solid rgba(226,232,240,0.9)';
-                  e.currentTarget.style.color = '#1e40af';
-                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                  e.currentTarget.style.boxShadow = '0 4px 18px rgba(239,68,68,0.45)';
+                  e.currentTarget.style.transform = 'scale(1)';
                 }}
               >
-                {k}
+                <PhoneOff size={21} />
               </button>
-            ))}
+
+              {/* Record toggle */}
+              <ControlBtn
+                onClick={toggleRecording}
+                active={recording}
+                activeColor="#ef4444"
+                title={recording ? 'Stop recording' : 'Record call'}
+              >
+                {recording
+                  ? <Square size={15} fill="#ef4444" />
+                  : <Circle size={19} />}
+              </ControlBtn>
+
+              {/* Keypad toggle */}
+              <ControlBtn
+                onClick={() => setShowKeypad((s) => !s)}
+                active={showKeypad}
+                title="Keypad"
+              >
+                <Grid3x3 size={19} />
+              </ControlBtn>
+            </div>
+
+            {/* DTMF keypad */}
+            {showKeypad && (
+              <div
+                style={{
+                  padding: '8px 12px 12px',
+                  borderTop: '1px solid rgba(226,232,240,0.5)',
+                  background: 'rgba(239,246,255,0.45)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 6,
+                }}
+              >
+                {KEYS.map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => sendDigit(k)}
+                    style={{
+                      padding: '9px 0',
+                      borderRadius: 9,
+                      background: 'white',
+                      border: '1.5px solid rgba(226,232,240,0.9)',
+                      cursor: 'pointer',
+                      fontWeight: 600, fontSize: 15,
+                      color: '#1e40af',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      transition: 'all 0.1s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#eff6ff';
+                      e.currentTarget.style.border = '1.5px solid #93c5fd';
+                      e.currentTarget.style.color = '#2563eb';
+                      e.currentTarget.style.boxShadow = '0 3px 10px rgba(59,130,246,0.16)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'white';
+                      e.currentTarget.style.border = '1.5px solid rgba(226,232,240,0.9)';
+                      e.currentTarget.style.color = '#1e40af';
+                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                    }}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Held call strip ─────────────────────────────────────────────── */}
+        {heldCallInfo && (
+          <div
+            style={{
+              borderTop: (activeCall && activeCallInfo) ? '1px solid rgba(226,232,240,0.55)' : 'none',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              background: 'rgba(248,250,252,0.75)',
+            }}
+          >
+            {/* Pulsing amber dot */}
+            <span
+              style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                background: '#fbbf24',
+                boxShadow: '0 0 6px rgba(251,191,36,0.9)',
+              }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                On Hold
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: '#475569', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {formatPhone(heldCallInfo.number)}
+              </div>
+            </div>
+            <button
+              onClick={unholdCall}
+              title={activeCall ? 'Swap calls' : 'Resume call'}
+              style={{
+                padding: '5px 13px',
+                borderRadius: 8,
+                border: 'none',
+                background: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+                color: 'white',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+                flexShrink: 0,
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+            >
+              {activeCall ? 'Swap' : 'Resume'}
+            </button>
           </div>
         )}
       </div>

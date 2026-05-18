@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -195,6 +196,14 @@ def setup(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid setup token",
         )
+
+    # H-06: serialize concurrent setup requests so two simultaneous calls cannot
+    # both pass the admin-exists check and create two admin accounts.
+    # Lock key 0 is a fixed constant for the "setup" critical section.
+    # Auto-released on commit/rollback (transaction-scoped).
+    db.execute(text("SELECT pg_advisory_xact_lock(0)"))
+    if _admin_exists(db):
+        raise _SETUP_GONE
 
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")

@@ -752,7 +752,7 @@ export default function DashboardPage() {
         download(toCSV(headers, rows), 'all-departments');
       }
     } catch {
-      alert('CSV export failed. Please check your connection and try again.');
+      setError('CSV export failed. Please check your connection and try again.');
     } finally {
       setExportingCSV(false);
     }
@@ -966,6 +966,15 @@ export default function DashboardPage() {
             {exportingCSV ? 'Exporting…' : 'Export CSV'}
           </button>
         </div>
+
+        {/* ── Truncated warning ───────────────────────────────────────────── */}
+        {data?.truncated && (
+          <div className="mb-6 px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2"
+            style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.35)', color: colors.isDark ? '#fde047' : '#92400e' }}>
+            <span>⚠️</span>
+            <span>Time-series charts show only the most recent 5,000 calls. Summary KPI totals are exact.</span>
+          </div>
+        )}
 
         {/* ── Error State ─────────────────────────────────────────────────── */}
         {error && (

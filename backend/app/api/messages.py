@@ -72,7 +72,19 @@ def _thread_from_number(user: User, to_number: str, db: Session) -> str:
         .first()
     )
     if prior:
-        return prior.from_number
+        # H-05: verify the thread's from_number is still assigned to this user.
+        # After number reassignment, prior.from_number may belong to someone else.
+        owned = (
+            db.query(PhoneNumber)
+            .filter(
+                PhoneNumber.phone_number == prior.from_number,
+                PhoneNumber.assigned_to_user_id == user.id,
+                PhoneNumber.cap_sms.is_(True),
+            )
+            .first()
+        )
+        if owned:
+            return prior.from_number
     return _from_number(user, db)
 
 
