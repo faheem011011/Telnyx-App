@@ -283,6 +283,28 @@ def update_user(
         changes["department"] = {"from": user.department, "to": payload.department}
         user.department = payload.department
     if payload.is_active is not None and payload.is_active != user.is_active:
+        if payload.is_active is False:
+            if user_id == current_admin.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="You cannot deactivate your own account.",
+                )
+            # Block deactivation if this is the last active admin
+            if user.role == "admin":
+                active_admin_count = (
+                    db.query(User)
+                    .filter(
+                        User.role == "admin",
+                        User.is_active.is_(True),
+                        User.deleted_at.is_(None),
+                    )
+                    .count()
+                )
+                if active_admin_count <= 1:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Cannot deactivate the last active admin account.",
+                    )
         changes["is_active"] = {"from": user.is_active, "to": payload.is_active}
         user.is_active = payload.is_active
     if payload.password is not None:
