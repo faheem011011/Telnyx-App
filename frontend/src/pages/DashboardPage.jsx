@@ -635,7 +635,7 @@ export default function DashboardPage() {
   const { user }  = useAuth();
   const colors    = useChartColors(theme);
   const isAdmin   = user?.role === 'admin';
-  const { departments } = useDepartments();
+  const { departmentNames: departments } = useDepartments();
 
   const [range,        setRange]        = useState('7d');
   const [customStart,  setCustomStart]  = useState('');

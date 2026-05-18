@@ -344,7 +344,7 @@ function UsersTab({ users, loading, onRefresh }) {
       await adminApi.updateUser(u.id, { is_active: !u.is_active });
       onRefresh();
     } catch (err) {
-      setActionError(err.response?.data?.detail || 'Failed to update user status. Please try again.');
+      setActionError(formatApiError(err, 'Failed to update user status. Please try again.'));
     }
   };
 
