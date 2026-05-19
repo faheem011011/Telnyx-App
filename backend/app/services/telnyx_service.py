@@ -425,6 +425,48 @@ def call_record_stop(call_control_id: str) -> None:
     resp.raise_for_status()
 
 
+def fetch_recording_by_call_control_id(call_control_id: str) -> tuple[str | None, str | None]:
+    """Resolve (recording_id, fresh_url) for a call leg when recording_id was absent from the webhook.
+
+    Telnyx omits recording_id from call.recording.saved webhooks fired for
+    TeXML-initiated recordings started via Call Control. This function queries
+    GET /v2/recordings?filter[call_control_id]={id} to find the recording_id
+    so we can persist it and later mint fresh signed URLs on demand.
+
+    Returns (recording_id, url) — both None if nothing was found or the call failed.
+    """
+    _check_configured()
+    if not call_control_id:
+        return None, None
+    try:
+        resp = httpx.get(
+            "https://api.telnyx.com/v2/recordings",
+            headers=_cc_headers(),
+            params={"filter[call_control_id]": call_control_id, "page[size]": 10},
+            timeout=15,
+        )
+    except Exception:
+        log.exception(
+            "fetch_recording_by_call_control_id: request failed for call_control_id=%s",
+            call_control_id,
+        )
+        return None, None
+    if not resp.is_success:
+        log.warning(
+            "fetch_recording_by_call_control_id: status=%d body=%s",
+            resp.status_code, resp.text[:300],
+        )
+        return None, None
+    items = (resp.json() or {}).get("data") or []
+    if not items:
+        return None, None
+    rec = items[0]
+    recording_id = rec.get("id")
+    urls = rec.get("download_urls") or rec.get("recording_urls") or {}
+    url = urls.get("mp3") or urls.get("wav")
+    return recording_id, url
+
+
 def fetch_recording_url(recording_id: str) -> str | None:
     """Return a fresh signed download URL (mp3 preferred, wav fallback).
 

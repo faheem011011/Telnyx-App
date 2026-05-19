@@ -53,6 +53,7 @@ from app.services.telnyx_service import (
     build_outgoing_texml,
     build_voicemail_texml,
     call_hangup,
+    fetch_recording_by_call_control_id,
 )
 
 log = logging.getLogger(__name__)
@@ -1104,14 +1105,29 @@ async def handle_recording_event(request: Request, db: Session = Depends(get_db)
     # ~10 minutes after delivery, so without recording_id the recording becomes
     # permanently inaccessible shortly after this webhook fires.
     # Known cause: TeXML-initiated recordings may omit recording_id in the payload.
-    # Log at WARNING so operators are alerted; include full payload for diagnostics.
+    # Fallback: query GET /v2/recordings?filter[call_control_id]={id} to resolve it.
     if not recording_id:
         log.warning(
             "recording-event: call.recording.saved arrived WITHOUT recording_id "
-            "(call_control_id=%r). The pre-signed recording_url will expire in ~10 min "
-            "and cannot be refreshed. Full payload: %s",
+            "(call_control_id=%r). Attempting filter-API fallback. Full payload: %s",
             call_control_id, payload,
         )
+        if call_control_id:
+            resolved_id, resolved_url = fetch_recording_by_call_control_id(call_control_id)
+            if resolved_id:
+                recording_id = resolved_id
+                if resolved_url:
+                    recording_url = resolved_url
+                log.info(
+                    "recording-event: resolved recording_id=%r via filter lookup for call_control_id=%r",
+                    recording_id, call_control_id,
+                )
+            else:
+                log.warning(
+                    "recording-event: filter lookup found no recording for call_control_id=%r; "
+                    "pre-signed URL will expire in ~10 min and cannot be refreshed.",
+                    call_control_id,
+                )
 
     if not (call_control_id and recording_url):
         log.warning("recording-event: missing call_control_id or recording_url; ignoring")
