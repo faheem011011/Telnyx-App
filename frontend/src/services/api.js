@@ -2,11 +2,13 @@ import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-const api = axios.create({
+const _baseConfig = {
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
-});
+};
+
+const api = axios.create(_baseConfig);
 
 // Attach JWT on every request
 api.interceptors.request.use((config) => {
@@ -34,6 +36,24 @@ api.interceptors.response.use(
   }
 );
 
+// Public API instance — no auth header, no 401 redirect.
+// Used for unauthenticated flows (verify-email, reset-password, forgot-password, setup)
+// so that a backend 401 (expired/invalid token) propagates to the caller's .catch()
+// rather than being swallowed by the redirect interceptor.
+const publicApi = axios.create(_baseConfig);
+
+publicApi.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 429) {
+      const rateLimitErr = new Error('Too many requests — please wait a moment and try again.');
+      rateLimitErr.isRateLimit = true;
+      return Promise.reject(rateLimitErr);
+    }
+    return Promise.reject(err);
+  }
+);
+
 // ============================================================
 // Auth
 // ============================================================
@@ -49,14 +69,14 @@ export const authApi = {
     api.post('/api/auth/change-password', { old_password, new_password }).then((r) => r.data),
   logout: () => api.post('/api/auth/logout').catch(() => {}),
   forgotPassword: (email) =>
-    api.post('/api/auth/forgot-password', { email }).then((r) => r.data),
+    publicApi.post('/api/auth/forgot-password', { email }).then((r) => r.data),
   resetPassword: (token, new_password) =>
-    api.post('/api/auth/reset-password', { token, new_password }).then((r) => r.data),
-  checkSetup: () => api.get('/api/auth/setup').then((r) => r.data),
+    publicApi.post('/api/auth/reset-password', { token, new_password }).then((r) => r.data),
+  checkSetup: () => publicApi.get('/api/auth/setup').then((r) => r.data),
   setup: (name, email, password) =>
-    api.post('/api/auth/setup', { name, email, password }).then((r) => r.data),
+    publicApi.post('/api/auth/setup', { name, email, password }).then((r) => r.data),
   verifyEmail: (token) =>
-    api.get('/api/auth/verify-email', { params: { token } }).then((r) => r.data),
+    publicApi.get('/api/auth/verify-email', { params: { token } }).then((r) => r.data),
 };
 
 // ============================================================
@@ -114,6 +134,8 @@ export const messagesApi = {
     api.post(`/api/messages/thread/${encodeURIComponent(phoneNumber)}/mark-read`),
   markThreadUnread: (phoneNumber) =>
     api.patch(`/api/messages/thread/${encodeURIComponent(phoneNumber)}/mark-unread`),
+  resend: (messageId) =>
+    api.post(`/api/messages/resend/${messageId}`).then((r) => r.data),
 };
 
 // ============================================================

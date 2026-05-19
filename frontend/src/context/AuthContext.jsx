@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { authApi, callsApi } from '../services/api';
+import { useSSE } from '../hooks/useSSE';
 
 const AuthContext = createContext(null);
 
@@ -13,6 +14,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [sseToken, setSseToken] = useState(() => localStorage.getItem('auth_token'));
 
   // Initial session restore on mount
   useEffect(() => {
@@ -95,6 +97,20 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
+  // SSE: dispatch window CustomEvents so any component can react without
+  // opening its own connection. unread count is refreshed immediately on
+  // call events so the sidebar badge updates without waiting for the 15s poll.
+  const handleSSEEvent = useCallback((eventName, data) => {
+    if (eventName === 'call.incoming' || eventName === 'call.updated') {
+      callsApi.unreadCount().then((r) => setUnreadCount(r.count)).catch(() => {});
+      window.dispatchEvent(new CustomEvent(`sse:${eventName}`, { detail: data }));
+    } else if (eventName === 'message.received') {
+      window.dispatchEvent(new CustomEvent('sse:message.received', { detail: data }));
+    }
+  }, []);
+
+  useSSE(sseToken, handleSSEEvent);
+
   const login = async (email, password) => {
     const data = await authApi.login(email, password);
     // ── KNOWN RISK: localStorage is XSS-readable ────────────────────────────
@@ -111,6 +127,7 @@ export function AuthProvider({ children }) {
     //      token_version bumps on the user row force re-login on next request.
     // ────────────────────────────────────────────────────────────────────────
     localStorage.setItem('auth_token', data.access_token);
+    setSseToken(data.access_token);
     setUser(data.user);
     return data.user;
   };
@@ -118,6 +135,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     await authApi.logout();
     localStorage.removeItem('auth_token');
+    setSseToken(null);
     setUser(null);
     window.location.href = '/login';
   };

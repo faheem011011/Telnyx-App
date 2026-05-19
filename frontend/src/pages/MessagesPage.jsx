@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Send, Phone, ArrowLeft, MessageCircle, Search, MailOpen } from 'lucide-react';
+import { Send, Phone, ArrowLeft, MessageCircle, Search, MailOpen, RotateCcw } from 'lucide-react';
 import { messagesApi } from '../services/api';
 import { useTelnyx } from '../context/TelnyxContext';
 import { formatPhone, formatCallDate, toE164 } from '../utils/format';
@@ -35,8 +35,20 @@ export default function MessagesPage() {
 
   useEffect(() => {
     load(true);
-    const id = setInterval(() => load(false), 10000);
-    return () => clearInterval(id);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(false); };
+    const id = setInterval(() => { if (!document.hidden) load(false); }, 10000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [load]);
+
+  // SSE: immediately refresh conversation list when a new inbound message arrives.
+  useEffect(() => {
+    const onSseMessage = () => load(false);
+    window.addEventListener('sse:message.received', onSseMessage);
+    return () => window.removeEventListener('sse:message.received', onSseMessage);
   }, [load]);
 
   // When the user opens a thread, the ThreadView fires mark-read on the backend —
@@ -275,9 +287,25 @@ function ThreadView({ phoneNumber, onSent }) {
 
   useEffect(() => {
     load(true);
-    const id = setInterval(() => load(false), 8000);
-    return () => clearInterval(id);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(false); };
+    const id = setInterval(() => { if (!document.hidden) load(false); }, 8000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [load]);
+
+  // SSE: immediately load new messages when the sender is this conversation.
+  useEffect(() => {
+    const onSseMessage = (e) => {
+      if (!e.detail || e.detail.from_number === phoneNumber) {
+        load(false);
+      }
+    };
+    window.addEventListener('sse:message.received', onSseMessage);
+    return () => window.removeEventListener('sse:message.received', onSseMessage);
+  }, [load, phoneNumber]);
 
   useEffect(() => {
     if (!phoneNumber) return;
@@ -332,6 +360,16 @@ function ThreadView({ phoneNumber, onSent }) {
       await makeCall(phoneNumber);
     } catch (e) {
       setError(e.message || 'Call failed. Check the number and try again.');
+    }
+  };
+
+  const handleRetry = async (messageId) => {
+    setError(null);
+    try {
+      const updated = await messagesApi.resend(messageId);
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Retry failed');
     }
   };
 
@@ -395,7 +433,7 @@ function ThreadView({ phoneNumber, onSent }) {
                     </span>
                   </div>
                 )}
-                <MessageBubble message={m} />
+                <MessageBubble message={m} onRetry={handleRetry} />
               </div>
             );
           })
@@ -414,15 +452,19 @@ function ThreadView({ phoneNumber, onSent }) {
   );
 }
 
-function MessageBubble({ message }) {
+function MessageBubble({ message, onRetry }) {
   const isOut = message.direction === 'outbound';
   const isSending = message.status === 'sending';
+  const isFailed = message.status === 'failed';
+
   return (
-    <div className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex flex-col ${isOut ? 'items-end' : 'items-start'}`}>
       <div
         className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed transition-opacity ${
           isOut
-            ? 'bg-brand-600 text-white rounded-br-md'
+            ? isFailed
+              ? 'bg-red-500 text-white rounded-br-md'
+              : 'bg-brand-600 text-white rounded-br-md'
             : 'surface-tertiary rounded-bl-md'
         } ${isSending ? 'opacity-60' : 'opacity-100'}`}
       >
@@ -430,12 +472,23 @@ function MessageBubble({ message }) {
         <div className={`text-[10px] mt-1 ${isOut ? 'text-white/60' : 'text-faint'}`}>
           {isSending
             ? 'Sending…'
+            : isFailed
+            ? 'Failed to send'
             : new Date(message.created_at).toLocaleTimeString('en-US', {
                 hour: 'numeric',
                 minute: '2-digit',
               })}
         </div>
       </div>
+      {isFailed && isOut && onRetry && (
+        <button
+          onClick={() => onRetry(message.id)}
+          className="flex items-center gap-1 mt-1 text-xs text-red-500 hover:text-red-700 transition-colors"
+        >
+          <RotateCcw className="w-3 h-3" />
+          Retry
+        </button>
+      )}
     </div>
   );
 }

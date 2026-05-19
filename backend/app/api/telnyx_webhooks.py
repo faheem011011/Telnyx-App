@@ -43,8 +43,10 @@ from fastapi.responses import Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import app.events as ev
 from app.config import settings
 from app.database import get_db
+from app.limiter import limiter
 from app.models import Call, Message, PhoneNumber, User, WebhookEvent
 from app.services.telnyx_service import (
     build_incoming_texml,
@@ -159,6 +161,7 @@ def _resolve_user_by_to_number(to_number: str, db: Session) -> User | None:
     admin unassigned the number, because unassign_number() did not previously
     clear User.phone_number.  Both fields are now cleared atomically on unassign.
     """
+    to_number = _normalize_e164(to_number)
     if not to_number:
         return None
     pn = db.query(PhoneNumber).filter(PhoneNumber.phone_number == to_number).first()
@@ -358,6 +361,7 @@ def _texml_event_id(route_name: str, form_data: dict) -> str:
 # ---------------------------------------------------------------------------
 
 @router.post("/outbound-call")
+@limiter.limit("1000/minute")
 async def handle_outbound_call(request: Request, db: Session = Depends(get_db)):
     """Handle an outgoing call initiated from the browser via Telnyx WebRTC SDK.
 
@@ -666,6 +670,7 @@ def _v2_handle_hangup(db: Session, payload: dict, call_control_id: str) -> Respo
 # ---------------------------------------------------------------------------
 
 @router.post("/incoming-call")
+@limiter.limit("1000/minute")
 async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     """Handle an incoming PSTN call to the Telnyx phone number."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
@@ -737,6 +742,11 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
         log.exception("Failed to persist inbound call record SID=%s", call_sid)
+    else:
+        try:
+            await ev.broadcast(user.id, "call.incoming", {"from_number": from_number, "call_sid": call_sid})
+        except Exception:
+            pass
 
     return _xml(build_incoming_texml(user.telnyx_sip_username))
 
@@ -746,6 +756,7 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 @router.post("/post-dial")
+@limiter.limit("1000/minute")
 async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after <Dial> resolves for an inbound call."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
@@ -788,6 +799,11 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
             except Exception:
                 db.rollback()
                 log.exception("Failed to update call %s in post-dial", call_sid)
+            else:
+                try:
+                    await ev.broadcast(call.owner_id, "call.updated", {"call_sid": call_sid})
+                except Exception:
+                    pass
 
     if dial_status in ("no-answer", "busy", "failed"):
         return _xml(build_voicemail_texml())
@@ -800,6 +816,7 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 @router.post("/call-status")
+@limiter.limit("1000/minute")
 async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     """Receive call lifecycle status updates from Telnyx."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
@@ -837,7 +854,7 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
             call.duration_seconds = duration
         if recording_url:
             call.recording_url = _normalize_recording_url(recording_url)
-        if call_status in ("completed", "no-answer", "busy", "failed", "canceled"):
+        if call_status in ("completed", "missed", "no-answer", "busy", "failed", "canceled"):
             if not call.ended_at:
                 call.ended_at = _now()
         try:
@@ -845,6 +862,11 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
         except Exception:
             db.rollback()
             log.exception("Failed to update call status for SID=%s", call_sid)
+        else:
+            try:
+                await ev.broadcast(call.owner_id, "call.updated", {"call_sid": call_sid})
+            except Exception:
+                pass
 
     return _xml("<Response></Response>")
 
@@ -854,6 +876,7 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 @router.post("/voicemail-complete")
+@limiter.limit("1000/minute")
 async def handle_voicemail_complete(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after a voicemail recording finishes."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
@@ -873,6 +896,12 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
         call = db.query(Call).filter(Call.call_sid == call_sid).with_for_update().first()
         if call:
             call.voicemail_url = _normalize_recording_url(recording_url)
+            # Extract recording ID from the Telnyx API URL at ingest time so
+            # get_voicemail_url can re-sign without re-parsing the URL on every
+            # request (mirrors the recording_id pattern for regular call recordings).
+            vid = recording_url.rstrip("/").split("/")[-1] if recording_url else None
+            if vid:
+                call.voicemail_recording_id = vid
             # Only downgrade to "missed" if the call never reached a terminal state.
             # Without this guard a completed (answered) call would be overwritten.
             if call.status not in _TERMINAL:
@@ -885,6 +914,11 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
             except Exception:
                 db.rollback()
                 log.exception("Failed to save voicemail URL for SID=%s", call_sid)
+            else:
+                try:
+                    await ev.broadcast(call.owner_id, "call.updated", {"call_sid": call_sid})
+                except Exception:
+                    pass
 
     return _xml("<Response><Hangup/></Response>")
 
@@ -894,6 +928,7 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
 # ---------------------------------------------------------------------------
 
 @router.post("/voicemail-transcription")
+@limiter.limit("1000/minute")
 async def handle_voicemail_transcription(request: Request):
     # Telnyx TeXML <Record> does not support transcription callbacks — this
     # endpoint is kept so any stale webhook config doesn't cause 404 errors.
@@ -908,8 +943,9 @@ async def handle_voicemail_transcription(request: Request):
 # ---------------------------------------------------------------------------
 
 @router.post("/incoming-sms")
+@limiter.limit("1000/minute")
 async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
-    """Handle Telnyx messaging webhooks (message.received / message.sent / message.finalized).
+    """Handle Telnyx messaging webhooks (message.received / message.sent / message.finalized / message.failed).
 
     Telnyx sends JSON for all messaging events — not form-encoded like Twilio.
     Payload structure:
@@ -934,10 +970,14 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
         return Response(status_code=204)
 
     # ── Delivery status update for outbound messages ──────────────────────────
-    if event_type in ("message.sent", "message.finalized"):
+    if event_type in ("message.sent", "message.finalized", "message.failed"):
         message_id = payload.get("id")
         to_list = payload.get("to", [])
         status = to_list[0].get("status") if to_list else None
+        # M-03: message.failed may omit to[0].status — fall back to "failed" so
+        # the record is never left stuck in "sent"/"queued" after a failure event.
+        if event_type == "message.failed" and not status:
+            status = "failed"
         if message_id and status:
             msg = db.query(Message).filter(Message.message_sid == message_id).first()
             if msg:
@@ -992,6 +1032,11 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
         log.exception("Failed to save inbound SMS from=%s", from_number)
+    else:
+        try:
+            await ev.broadcast(user.id, "message.received", {"from_number": from_number, "to_number": to_number})
+        except Exception:
+            pass
 
     return Response(status_code=204)
 
@@ -1003,6 +1048,7 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 @router.post("/recording-event")
+@limiter.limit("1000/minute")
 async def handle_recording_event(request: Request, db: Session = Depends(get_db)):
     """Receive call.recording.saved JSON events from Telnyx Call Control.
 

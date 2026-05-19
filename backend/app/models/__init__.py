@@ -34,8 +34,8 @@ class User(Base):
     voice_identity: Mapped[str] = mapped_column(
         String(36), unique=True, nullable=False, default=_new_voice_identity
     )
-    telnyx_credential_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    telnyx_sip_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    telnyx_credential_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
+    telnyx_sip_username: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
@@ -129,6 +129,7 @@ class Call(Base):
     recording_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     recording_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     voicemail_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    voicemail_recording_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     voicemail_transcription: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_starred: Mapped[bool] = mapped_column(Boolean, default=False)
