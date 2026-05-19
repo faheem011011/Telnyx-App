@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const SSE_EVENTS = ['message.received', 'call.incoming', 'call.updated'];
 const HEARTBEAT_TIMEOUT_MS = 45000;
 const MAX_RECONNECT_DELAY_MS = 30000;
