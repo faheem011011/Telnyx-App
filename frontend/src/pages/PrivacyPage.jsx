@@ -201,7 +201,7 @@ export default function PrivacyPage() {
               <SectionHeading id="overview" icon={FileText} title="Overview" />
               <div className="mt-5 space-y-4">
                 <p>
-                  AlphaBridge Consulting ("we," "us," or "our") operates <strong>AlphaCall</strong>, an internal
+                  AlphaBridge Consulting operates <strong>AlphaCall</strong>, an internal
                   business communication platform available at{' '}
                   <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
                     phone.alphabridgeconsulting.ai
