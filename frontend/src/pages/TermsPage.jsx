@@ -148,7 +148,7 @@ export default function TermsPage() {
             </h1>
             <p className="text-lg text-gray-600 leading-relaxed mb-6">
               The rules, rights, and responsibilities governing your use of{' '}
-              <strong className="text-gray-800">AlphaCall</strong> — AlphaBridge Consulting's
+              <strong className="text-gray-800">AlphaCall</strong> - AlphaBridge Consulting's
               internal business communication platform.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
