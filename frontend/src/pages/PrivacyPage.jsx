@@ -289,6 +289,17 @@ export default function PrivacyPage() {
                   appointment scheduling, follow-ups, and consulting communications. All SMS activity is conducted
                   through the AlphaCall platform.
                 </p>
+                <p>
+                  <strong>How we collect SMS consent:</strong> Registered users of AlphaCall provide explicit
+                  SMS opt-in consent during account creation at{' '}
+                  <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
+                    phone.alphabridgeconsulting.ai
+                  </a>
+                  . The registration form includes an unchecked consent checkbox with clear disclosure of
+                  message frequency, applicable rates, opt-out instructions, and links to this Privacy Policy
+                  and the Terms &amp; Conditions. Providing a mobile number and checking the consent box is
+                  optional and is never a condition of platform access.
+                </p>
                 <div className="grid sm:grid-cols-3 gap-3">
                   <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50 text-center">
                     <p className="text-2xl font-bold text-emerald-600 mb-1">STOP</p>
@@ -304,7 +315,12 @@ export default function PrivacyPage() {
                   </div>
                 </div>
                 <HighlightBox type="success">
-                  AlphaBridge Consulting does <strong>not</strong> sell or share phone numbers or message content with third parties for marketing purposes.
+                  <strong>SMS Opt-In Data Notice:</strong> AlphaBridge Consulting does <strong>not</strong> sell,
+                  share, or transfer SMS opt-in data, consent records, phone numbers, or message content to
+                  third parties or affiliates for marketing or promotional purposes. SMS opt-in information
+                  is used solely to deliver the platform notifications you have requested. Limited data
+                  sharing with Telnyx (our telephony service provider) is permitted only to the extent
+                  necessary to transmit or receive messages on your behalf.
                 </HighlightBox>
               </div>
             </section>
