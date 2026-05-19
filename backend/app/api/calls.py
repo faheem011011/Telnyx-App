@@ -16,6 +16,7 @@ from app.services.telnyx_service import (
     call_record_start,
     call_record_stop,
     fetch_recording_url,
+    fetch_recording_by_call_control_id,
 )
 
 log = logging.getLogger(__name__)
@@ -376,27 +377,55 @@ def get_recording_url(
         raise HTTPException(status_code=404, detail="Call not found")
     if not call.recording_id:
         # M-08: no recording_id means the call.recording.saved webhook arrived
-        # without one (known to happen with TeXML-initiated recordings). We have
-        # no way to re-mint a fresh signed URL via GET /v2/recordings/{id}.
-        # The pre-signed S3 URL in recording_url expires ~10 min after the
-        # webhook fired, so serving it beyond that window will produce a 403 on
-        # the client side.  Return 410 Gone rather than silently handing back a
-        # URL that is very likely already expired, so the frontend can show a
-        # clear "no longer available" message instead of a silent playback failure.
+        # without one (known to happen with TeXML-initiated recordings).
+        # Lazy fallback: query GET /v2/recordings?filter[call_control_id]={sid}
+        # to resolve the recording_id now and persist it so future requests are fast.
         if not call.recording_url:
             raise HTTPException(status_code=404, detail="No recording for this call")
-        log.warning(
-            "get_recording_url: call.id=%s has recording_url but no recording_id "
-            "(pre-signed URL may be expired; cannot refresh without recording_id)",
-            call_id,
-        )
-        raise HTTPException(
-            status_code=410,
-            detail=(
-                "Recording is no longer available. "
-                "It was captured without a durable identifier and the temporary link has expired."
-            ),
-        )
+        if call.call_sid:
+            log.info(
+                "get_recording_url: call.id=%s missing recording_id; trying filter-API fallback",
+                call_id,
+            )
+            resolved_id, resolved_url = fetch_recording_by_call_control_id(call.call_sid)
+            if resolved_id:
+                call.recording_id = resolved_id
+                if resolved_url:
+                    call.recording_url = resolved_url
+                try:
+                    db.commit()
+                    log.info(
+                        "get_recording_url: persisted recording_id=%s for call.id=%s via lazy lookup",
+                        resolved_id, call_id,
+                    )
+                except Exception:
+                    db.rollback()
+                # Fall through to the normal refresh path using the now-set recording_id
+            else:
+                log.warning(
+                    "get_recording_url: call.id=%s filter-API fallback found nothing; "
+                    "pre-signed URL is likely expired.",
+                    call_id,
+                )
+                raise HTTPException(
+                    status_code=410,
+                    detail=(
+                        "Recording is no longer available. "
+                        "It was captured without a durable identifier and the temporary link has expired."
+                    ),
+                )
+        else:
+            log.warning(
+                "get_recording_url: call.id=%s has no recording_id and no call_sid for fallback lookup",
+                call_id,
+            )
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "Recording is no longer available. "
+                    "It was captured without a durable identifier and the temporary link has expired."
+                ),
+            )
 
     url = fetch_recording_url(call.recording_id)
     if not url:
