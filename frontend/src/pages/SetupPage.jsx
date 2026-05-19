@@ -204,6 +204,24 @@ export default function SetupPage() {
             </Link>
           }
         />
+
+        {/* SMS compliance notice — required for 10DLC opt-in disclosure */}
+        <div className="w-full max-w-sm mx-auto mt-2 px-4 py-3 rounded-xl border border-gray-100 bg-gray-50">
+          <p className="text-[11px] text-gray-500 leading-relaxed text-center">
+            By creating an account you agree to receive SMS notifications from{' '}
+            <strong>Alphacall</strong> (missed calls, voicemail alerts, system updates).
+            Message frequency may vary. Msg &amp; data rates may apply.
+            Reply <strong>STOP</strong> to opt out · <strong>HELP</strong> for help.
+            {' '}
+            <a href="/privacypolicy" target="_blank" rel="noopener noreferrer" className="text-[#07438C] hover:underline">
+              Privacy Policy
+            </a>
+            {' · '}
+            <a href="/termsandconditions" target="_blank" rel="noopener noreferrer" className="text-[#07438C] hover:underline">
+              Terms &amp; Conditions
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );
