@@ -674,11 +674,21 @@ export default function DashboardPage() {
   // Initial + filter-change load
   useEffect(() => { fetchData(false); }, [fetchData]);
 
-  // 30-second polling (stale-while-revalidate, skip custom range)
+  // 30-second polling — skipped when the tab is hidden to avoid wasted DB queries.
+  // Resumes immediately (no waiting for the next tick) when the tab becomes visible.
   useEffect(() => {
     if (range === 'custom') return;
-    const id = setInterval(() => fetchData(true), 30000);
-    return () => clearInterval(id);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchData(true);
+    };
+    const id = setInterval(() => {
+      if (!document.hidden) fetchData(true);
+    }, 30000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [range, fetchData]);
 
   const exportCSV = async () => {

@@ -111,7 +111,7 @@ def list_conversations(
     latest_sub = (
         db.query(Message.id.label("id"), other_col)
         .filter(Message.owner_id == current_user.id)
-        .order_by(other_col, desc(Message.created_at))
+        .order_by(other_col, desc(Message.created_at), desc(Message.id))
         .distinct(other_col)
         .subquery()
     )
@@ -119,7 +119,7 @@ def list_conversations(
     latest_messages = (
         db.query(Message)
         .filter(Message.id.in_(db.query(latest_sub.c.id)))
-        .order_by(desc(Message.created_at))
+        .order_by(desc(Message.created_at), desc(Message.id))
         .offset(offset)
         .limit(limit)
         .all()
@@ -257,6 +257,38 @@ def send_message(
     # client_id is never written to the DB — model_copy injects it only in the response.
     out = MessageOut.model_validate(msg)
     return out.model_copy(update={"client_id": payload.client_id})
+
+
+@router.post("/resend/{message_id}", response_model=MessageOut)
+def resend_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Resend a failed outbound message, reusing the original from/to/body."""
+    msg = db.query(Message).filter(
+        Message.id == message_id,
+        Message.owner_id == current_user.id,
+        Message.direction == "outbound",
+    ).first()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.status != "failed":
+        raise HTTPException(status_code=400, detail="Only failed messages can be resent")
+
+    try:
+        result = send_sms(msg.to_number, msg.body, msg.from_number)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid phone number or message.")
+    except Exception:
+        log.exception("SMS resend failed for message_id=%s", message_id)
+        raise HTTPException(status_code=500, detail="SMS service temporarily unavailable.")
+
+    msg.message_sid = result["sid"]
+    msg.status = result["status"]
+    db.commit()
+    db.refresh(msg)
+    return msg
 
 
 @router.delete("/thread/{phone_number}", status_code=status.HTTP_204_NO_CONTENT)

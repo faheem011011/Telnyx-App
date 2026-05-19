@@ -2,11 +2,12 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.limiter import limiter
 from app.models import Call, Contact, Message, User
 from app.services.deps import get_current_user, require_admin
 
@@ -298,7 +299,9 @@ def _fetch_call_rows(
 
 
 @router.get("")
+@limiter.limit("30/minute")
 def get_analytics(
+    request:    Request,
     period:     str        = Query("7d", alias="range"),
     start:      str | None = Query(None),
     end:        str | None = Query(None),
@@ -502,7 +505,9 @@ def get_analytics(
 
 
 @router.get("/users-summary")
+@limiter.limit("30/minute")
 def get_users_summary(
+    request:    Request,
     period:     str        = Query("7d", alias="range"),
     start:      str | None = Query(None),
     end:        str | None = Query(None),

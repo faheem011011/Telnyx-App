@@ -321,9 +321,9 @@ def get_voicemail_url(
 ):
     """Mint a fresh signed download URL for a voicemail recording.
 
-    voicemail_url stored in the DB is a raw Telnyx API URL that requires an
-    Authorization header — browsers can't load it directly. We extract the
-    recording ID and re-sign via Telnyx the same way we do for call recordings.
+    Uses the stored voicemail_recording_id (set at webhook time) to call
+    GET /v2/recordings/{id} and return a fresh signed URL. Falls back to
+    parsing voicemail_url for rows that pre-date this column.
     """
     call = db.query(Call).filter(
         Call.id == call_id,
@@ -332,7 +332,22 @@ def get_voicemail_url(
     if not call or not call.voicemail_url:
         raise HTTPException(status_code=404, detail="No voicemail for this call")
 
-    recording_id = call.voicemail_url.rstrip("/").split("/")[-1]
+    recording_id = call.voicemail_recording_id
+    if not recording_id:
+        # Legacy fallback for rows stored before voicemail_recording_id was added.
+        recording_id = call.voicemail_url.rstrip("/").split("/")[-1] or None
+        if recording_id:
+            log.warning(
+                "get_voicemail_url: call.id=%s has no voicemail_recording_id; "
+                "falling back to URL parse (pre-migration row)",
+                call_id,
+            )
+    if not recording_id:
+        raise HTTPException(
+            status_code=410,
+            detail="Voicemail recording ID is unavailable and cannot be refreshed.",
+        )
+
     url = fetch_recording_url(recording_id)
     if not url:
         raise HTTPException(status_code=404, detail="Voicemail is no longer available from Telnyx")

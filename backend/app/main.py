@@ -16,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 
 import sentry_sdk
 
-from app.api import analytics, auth, calls, contacts, messages, telnyx_webhooks
+from app.api import analytics, auth, calls, contacts, events as events_api, messages, telnyx_webhooks
 from app.api import admin
 from app.config import settings
 from app.database import engine, get_db
@@ -154,6 +154,7 @@ app.include_router(calls.router)
 app.include_router(messages.router)
 app.include_router(telnyx_webhooks.router)
 app.include_router(analytics.router)
+app.include_router(events_api.router)
 
 
 @app.get("/")
