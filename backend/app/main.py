@@ -47,24 +47,24 @@ async def lifespan(app: FastAPI):
     # Warn on missing Telnyx config that causes silent failures at call time.
     if not settings.telnyx_api_key:
         _startup_log.warning(
-            "TELNYX_API_KEY is not set — WebRTC token generation and outbound "
+            "TELNYX_API_KEY is not set - WebRTC token generation and outbound "
             "calls will fail at runtime."
         )
     if not settings.telnyx_connection_id:
         _startup_log.warning(
-            "TELNYX_CONNECTION_ID is not set — the Credential Connection used "
+            "TELNYX_CONNECTION_ID is not set - the Credential Connection used "
             "for WebRTC auto-bridge is unknown. Outbound calls will be rejected "
             "by the webhook handler (_v2_handle_initiated) because no SIP "
             "credential can be provisioned."
         )
     if not settings.telnyx_phone_number:
         _startup_log.warning(
-            "TELNYX_PHONE_NUMBER is not set — inbound TeXML routing and "
+            "TELNYX_PHONE_NUMBER is not set - inbound TeXML routing and "
             "caller-ID on outbound calls will be unavailable."
         )
     if not settings.telnyx_public_key:
         _startup_log.warning(
-            "TELNYX_PUBLIC_KEY is not set — webhook signature verification "
+            "TELNYX_PUBLIC_KEY is not set - webhook signature verification "
             "is disabled; all incoming webhook requests will be accepted "
             "without authentication."
         )
@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        _startup_log.info("AlphaCall API shutting down — disposing engine pool")
+        _startup_log.info("AlphaCall API shutting down - disposing engine pool")
         engine.dispose()
 
 
@@ -125,7 +125,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(
     title="AlphaCall API",
-    description="Telnyx-powered browser phone — calls, SMS, voicemail",
+    description="Telnyx-powered browser phone - calls, SMS, voicemail",
     version="2.0.0",
     lifespan=lifespan,
     docs_url=None,

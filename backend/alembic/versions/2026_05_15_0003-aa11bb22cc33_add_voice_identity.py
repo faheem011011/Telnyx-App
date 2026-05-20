@@ -32,7 +32,7 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()::text"),
         ),
     )
-    # Drop the server_default — new rows get the value from the Python-level
+    # Drop the server_default - new rows get the value from the Python-level
     # model default (_new_voice_identity) so the DB never needs to generate one.
     op.alter_column("users", "voice_identity", server_default=None, nullable=False)
     op.create_unique_constraint("uq_users_voice_identity", "users", ["voice_identity"])

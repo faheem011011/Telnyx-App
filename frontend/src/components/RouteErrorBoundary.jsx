@@ -21,7 +21,7 @@ export default class RouteErrorBoundary extends Component {
           </div>
           <h2 className="text-base font-display font-semibold mb-1">This page crashed</h2>
           <p className="text-sm text-muted mb-4 max-w-xs">
-            An unexpected error occurred. Other pages are still working — navigate away or try again.
+            An unexpected error occurred. Other pages are still working - navigate away or try again.
           </p>
           <button
             onClick={() => this.setState({ hasError: false })}

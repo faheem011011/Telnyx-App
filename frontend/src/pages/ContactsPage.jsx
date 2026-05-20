@@ -277,7 +277,7 @@ function ContactFormModal({ contact, onClose, onSaved }) {
     >
       {/* Compacted: smaller padding, denser grid (name+phone, email+company
           side-by-side on >=sm), a 2-row notes textarea, and a max-h with
-          overflow-y so the modal always fits the viewport — never pushes
+          overflow-y so the modal always fits the viewport - never pushes
           off-screen on shorter laptop displays. */}
       <div
         className="w-full max-w-lg mx-4 rounded-2xl p-4 sm:p-5 animate-slide-up max-h-[92vh] overflow-y-auto"

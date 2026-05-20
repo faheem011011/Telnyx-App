@@ -1,4 +1,4 @@
-"""FastAPI dependencies — current user auth and role guards."""
+"""FastAPI dependencies - current user auth and role guards."""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session

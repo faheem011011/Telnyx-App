@@ -58,7 +58,7 @@ class User(Base):
 
 
 class PhoneNumber(Base):
-    """Telnyx phone number — purchased and optionally assigned to a user."""
+    """Telnyx phone number - purchased and optionally assigned to a user."""
 
     __tablename__ = "phone_numbers"
 
@@ -178,7 +178,7 @@ class Message(Base):
 
 
 class Department(Base):
-    """Admin-managed department — replaces the old hardcoded Literal list."""
+    """Admin-managed department - replaces the old hardcoded Literal list."""
 
     __tablename__ = "departments"
 
@@ -239,7 +239,7 @@ class PasswordResetToken(Base):
 
 
 class WebhookEvent(Base):
-    """Telnyx webhook event — recorded for idempotency."""
+    """Telnyx webhook event - recorded for idempotency."""
     __tablename__ = "webhook_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

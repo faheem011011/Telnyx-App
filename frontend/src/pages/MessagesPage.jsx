@@ -51,7 +51,7 @@ export default function MessagesPage() {
     return () => window.removeEventListener('sse:message.received', onSseMessage);
   }, [load]);
 
-  // When the user opens a thread, the ThreadView fires mark-read on the backend —
+  // When the user opens a thread, the ThreadView fires mark-read on the backend -
   // refresh the conversation list shortly after so the unread badge clears.
   useEffect(() => {
     if (phoneNumber && phoneNumber !== 'new') {
@@ -252,7 +252,7 @@ function NewMessageComposer({ onSent }) {
 }
 
 /* ============================================================ */
-/* Thread view — messages for one phone number                  */
+/* Thread view - messages for one phone number                  */
 /* ============================================================ */
 function ThreadView({ phoneNumber, onSent }) {
   const [messages, setMessages] = useState([]);
@@ -273,7 +273,7 @@ function ThreadView({ phoneNumber, onSent }) {
           const optimistic = prev.filter((m) => typeof m.id === 'string' && m.id.startsWith('opt-'));
           const merged = [...next];
           for (const opt of optimistic) {
-            // M-18: use client_id as the sole dedup key — body+direction matching
+            // M-18: use client_id as the sole dedup key - body+direction matching
             // would incorrectly drop one of two identical rapid messages.
             const confirmed = next.some((m) => m.client_id && m.client_id === opt.client_id);
             if (!confirmed) merged.push(opt);
@@ -324,7 +324,7 @@ function ThreadView({ phoneNumber, onSent }) {
     setError(null);
     setSending(true);
 
-    // Optimistic update — show message immediately
+    // Optimistic update - show message immediately
     // M-18: generate a UUID so the polling dedup can match by client_id, not body+direction.
     const clientId = crypto.randomUUID();
     const optimisticId = `opt-${Date.now()}`;

@@ -1,4 +1,4 @@
-"""In-process SSE event registry — per-user asyncio queues for real-time browser push."""
+"""In-process SSE event registry - per-user asyncio queues for real-time browser push."""
 import asyncio
 import json
 from collections import defaultdict

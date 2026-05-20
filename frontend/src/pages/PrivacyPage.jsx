@@ -140,7 +140,7 @@ export default function PrivacyPage() {
             </h1>
             <p className="text-lg text-gray-600 leading-relaxed mb-6">
               How AlphaBridge Consulting collects, uses, stores, and protects information
-              through the <strong className="text-gray-800">AlphaCall</strong> platform — including your
+              through the <strong className="text-gray-800">AlphaCall</strong> platform - including your
               rights regarding SMS communications and personal data.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
@@ -163,7 +163,7 @@ export default function PrivacyPage() {
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
         <div className="flex gap-10 lg:gap-16">
 
-          {/* TOC — sticky sidebar */}
+          {/* TOC - sticky sidebar */}
           <aside className="hidden lg:block w-56 flex-shrink-0">
             <div className="sticky top-24">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">On this page</p>
@@ -256,7 +256,7 @@ export default function PrivacyPage() {
                   />
                 </div>
                 <p className="text-sm text-gray-600">
-                  <strong>Third-Party Processing:</strong> Some data is processed through trusted providers —
+                  <strong>Third-Party Processing:</strong> Some data is processed through trusted providers -
                   specifically <strong>Telnyx</strong> for telephony and SMS services, and <strong>Clerk</strong> for
                   authentication. These providers handle data only as necessary to deliver their services and are
                   contractually bound to protect your information.
@@ -307,7 +307,7 @@ export default function PrivacyPage() {
                 <div>
                   <h4 className="text-sm font-semibold text-gray-800 mb-3">How We Collect SMS Consent</h4>
                   <p className="text-sm text-gray-700 mb-4">
-                    SMS opt-in consent is collected independently from any email or voice call consent — it is
+                    SMS opt-in consent is collected independently from any email or voice call consent - it is
                     SMS-specific only. Providing a phone number is never required. We collect consent through
                     one of the following documented methods:
                   </p>
@@ -330,7 +330,7 @@ export default function PrivacyPage() {
                         <Link to="/termsandconditions" className="underline font-medium">Terms &amp; Conditions</Link>."
                       </HighlightBox>
                       <p className="text-xs text-gray-500 mt-2">
-                        Terms and conditions are displayed inline on the page — never via popup.
+                        Terms and conditions are displayed inline on the page - never via popup.
                         Checking this box is entirely optional and is not required to access the platform.
                       </p>
                     </div>
@@ -411,7 +411,7 @@ export default function PrivacyPage() {
 
                 {/* Critical non-sharing statement */}
                 <HighlightBox type="success">
-                  <p className="font-semibold mb-2">SMS Opt-In Data — No Sharing, No Selling</p>
+                  <p className="font-semibold mb-2">SMS Opt-In Data - No Sharing, No Selling</p>
                   <p>
                     AlphaBridge Consulting does <strong>NOT</strong> sell, share, rent, or transfer SMS opt-in data,
                     consent records, phone numbers, or message content to any third party, affiliate, or partner for
@@ -429,7 +429,7 @@ export default function PrivacyPage() {
                   <strong>Message and data rates may apply.</strong> Message frequency varies based on business
                   activity and recipient engagement. For full SMS compliance details, see our{' '}
                   <Link to="/termsandconditions" className="text-brand-600 hover:underline font-medium">
-                    Terms of Service — Section 4
+                    Terms of Service - Section 4
                   </Link>.
                 </p>
               </div>

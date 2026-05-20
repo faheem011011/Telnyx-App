@@ -1,4 +1,4 @@
-"""Telnyx client wrapper — voice calls, SMS, and phone number management."""
+"""Telnyx client wrapper - voice calls, SMS, and phone number management."""
 import logging
 import re
 from xml.sax.saxutils import escape, quoteattr
@@ -17,7 +17,7 @@ class TelnyxApiError(Exception):
     Carries the upstream HTTP status and a short reason so the API layer can
     surface a useful detail in 502 responses instead of an opaque "Voice
     service unavailable." message. Operators flipping connection_id at deploy
-    time need this — the real Telnyx error is otherwise buried in Railway
+    time need this - the real Telnyx error is otherwise buried in Railway
     logs.
     """
 
@@ -48,8 +48,8 @@ def _telnyx_error_reason(resp: httpx.Response) -> str:
 
 
 # Validation regexes for TeXML interpolated values (C-02).
-#   _PHONE_RE — used for "to_number" and "caller_id" (E.164-ish).
-#   _SIP_USER_RE — looser; SIP usernames may not be E.164.
+#   _PHONE_RE - used for "to_number" and "caller_id" (E.164-ish).
+#   _SIP_USER_RE - looser; SIP usernames may not be E.164.
 _PHONE_RE = re.compile(r"^\+?[0-9]{7,15}$")
 _SIP_USER_RE = re.compile(r"^\+?[A-Za-z0-9._-]{3,64}$")
 
@@ -57,12 +57,12 @@ _SIP_USER_RE = re.compile(r"^\+?[A-Za-z0-9._-]{3,64}$")
 def _init():
     if settings.telnyx_api_key:
         telnyx.api_key = settings.telnyx_api_key
-    # H-15: warn if public_backend_url is not HTTPS — recording webhook URLs
+    # H-15: warn if public_backend_url is not HTTPS - recording webhook URLs
     # rely on this and Telnyx will refuse non-HTTPS callbacks.
     pbu = settings.public_backend_url or ""
     if pbu and not pbu.startswith("https://"):
         log.warning(
-            "settings.public_backend_url=%r is not HTTPS — Telnyx recording "
+            "settings.public_backend_url=%r is not HTTPS - Telnyx recording "
             "webhooks (call_record_start) may fail until this is fixed.",
             pbu,
         )
@@ -106,7 +106,7 @@ def generate_voice_access_token(
 
     # M-09: each call now uses timeout=15 (worst-case ~45s, but typical ~3s).
     # Frontend axios timeout is 30s, so the worst-path is intentionally tight on
-    # any single hop — failures surface fast via raise_for_status() rather than
+    # any single hop - failures surface fast via raise_for_status() rather than
     # waiting on the next stage.
     if existing_credential_id:
         try:
@@ -248,7 +248,7 @@ def purchase_number(phone_number: str) -> dict:
     )
     n = order.phone_numbers[0]
     purchased = n.phone_number
-    # Store the E.164 number as the sid — release_number resolves it to the
+    # Store the E.164 number as the sid - release_number resolves it to the
     # PhoneNumber resource ID at deletion time (order.id cannot be used for delete).
     return {
         "sid": purchased,
@@ -261,7 +261,7 @@ def purchase_number(phone_number: str) -> dict:
 
 
 _LIST_PAGE_SIZE = 250
-_MAX_PAGES = 1_000  # ~250 k numbers before we bail — guards against infinite loops
+_MAX_PAGES = 1_000  # ~250 k numbers before we bail - guards against infinite loops
 
 
 def list_owned_numbers() -> list[dict]:
@@ -302,7 +302,7 @@ def list_owned_numbers() -> list[dict]:
         if pages >= _MAX_PAGES:
             log.warning(
                 "list_owned_numbers: reached MAX_PAGES=%d after %d numbers; "
-                "stopping pagination early — investigate account size or Telnyx response.",
+                "stopping pagination early - investigate account size or Telnyx response.",
                 _MAX_PAGES, len(items),
             )
             break
@@ -328,7 +328,7 @@ def release_number(sid: str) -> bool:
     """Release (delete) a phone number from the Telnyx account.
 
     sid may be either the Telnyx PhoneNumber resource ID (UUID) or an E.164
-    number string — handle both since legacy rows stored the order ID and newer
+    number string - handle both since legacy rows stored the order ID and newer
     rows store the E.164 number.
     """
     _check_configured()
@@ -363,7 +363,7 @@ def release_number(sid: str) -> bool:
 
 
 # ============================================================
-# Call Control — recording (mixed TeXML + Call Control)
+# Call Control - recording (mixed TeXML + Call Control)
 # ============================================================
 
 def _cc_headers() -> dict:
@@ -376,7 +376,7 @@ def _cc_headers() -> dict:
 def call_record_start(call_control_id: str) -> None:
     """Start recording via Telnyx Call Control API.
 
-    call_control_id is the same value as the TeXML CallSid — Telnyx uses one ID
+    call_control_id is the same value as the TeXML CallSid - Telnyx uses one ID
     for both paradigms, so the value stored in Call.call_sid works here directly.
 
     webhook_url is set explicitly so call.recording.saved events are delivered to
@@ -433,7 +433,7 @@ def fetch_recording_by_call_control_id(call_control_id: str) -> tuple[str | None
     GET /v2/recordings?filter[call_control_id]={id} to find the recording_id
     so we can persist it and later mint fresh signed URLs on demand.
 
-    Returns (recording_id, url) — both None if nothing was found or the call failed.
+    Returns (recording_id, url) - both None if nothing was found or the call failed.
     """
     _check_configured()
     if not call_control_id:
@@ -473,7 +473,7 @@ def fetch_recording_url(recording_id: str) -> str | None:
     Telnyx mints a new short-lived S3 URL on every GET /v2/recordings/{id},
     which is how we work around the 403 the webhook's URL gets once its ~10
     minute window closes. Returns None if Telnyx no longer has the recording
-    or the lookup fails — callers should surface that as "recording
+    or the lookup fails - callers should surface that as "recording
     unavailable" rather than a generic 500.
     """
     _check_configured()
@@ -499,7 +499,7 @@ def fetch_recording_url(recording_id: str) -> str | None:
 
 
 # ============================================================
-# Call Control v2 — outbound dial (used when SIP Connection is in
+# Call Control v2 - outbound dial (used when SIP Connection is in
 # Programmable Voice mode rather than TeXML mode). The browser SDK calls
 # Telnyx with a SIP INVITE; Telnyx fires call.initiated as JSON to our
 # webhook; we then issue answer + transfer to bridge to the destination.
@@ -575,13 +575,13 @@ def build_outgoing_texml(to_number: str, caller_id: str | None = None) -> str:
 
 
 def build_incoming_texml(sip_username: str) -> str:
-    """TeXML for an incoming call — ring the browser WebRTC client via SIP.
+    """TeXML for an incoming call - ring the browser WebRTC client via SIP.
 
     C-02: validate the SIP username, escape text content, quoteattr attributes.
     """
     if not sip_username:
         raise ValueError(
-            "sip_username must not be empty — call build_voicemail_texml() instead "
+            "sip_username must not be empty - call build_voicemail_texml() instead "
             "when the user has no SIP credential yet."
         )
     if not _SIP_USER_RE.match(sip_username):

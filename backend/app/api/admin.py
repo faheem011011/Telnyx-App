@@ -345,7 +345,7 @@ def delete_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    # C-05: idempotency — a second delete (e.g. admin retry) is a no-op.
+    # C-05: idempotency - a second delete (e.g. admin retry) is a no-op.
     if user.deleted_at:
         return
 

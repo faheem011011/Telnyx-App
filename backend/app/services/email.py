@@ -114,7 +114,7 @@ def send_password_reset_email(to_email: str, reset_url: str) -> None:
                 button_text="Reset password",
                 button_url=reset_url,
                 expiry="1 hour",
-                disclaimer="If you didn't request a password reset, you can safely ignore this email — your password will remain unchanged.",
+                disclaimer="If you didn't request a password reset, you can safely ignore this email - your password will remain unchanged.",
             ),
         })
     except Exception:

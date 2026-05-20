@@ -11,7 +11,7 @@ export function useDepartments() {
       const data = await adminApi.listDepartments();
       setDepartments(data);
     } catch {
-      // silent — callers handle the empty-state UI
+      // silent - callers handle the empty-state UI
     } finally {
       setLoading(false);
     }
@@ -21,7 +21,7 @@ export function useDepartments() {
     refetch();
   }, [refetch]);
 
-  // Active department names only — for user-creation / edit dropdowns.
+  // Active department names only - for user-creation / edit dropdowns.
   const departmentNames = departments
     .filter((d) => d.is_active)
     .map((d) => d.name);

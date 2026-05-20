@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     def _require_strong_secret(self) -> "Settings":
         if self.secret_key == _DEV_SECRET:
             raise ValueError(
-                "SECRET_KEY is still the dev default — set a strong random value "
+                "SECRET_KEY is still the dev default - set a strong random value "
                 "in your environment before starting the server. "
                 "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
             )
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     resend_from_email: str = "noreply@yourdomain.com"
 
-    # CORS — comma-separated list of allowed origins
+    # CORS - comma-separated list of allowed origins
     cors_origins: str = (
         "http://localhost:5173,http://localhost:5174,"
         "https://call.alphabridgeconsulting.ai,https://phone.alphabridgeconsulting.ai"
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
-    # Sentry — leave empty to disable error tracking
+    # Sentry - leave empty to disable error tracking
     sentry_dsn: str = ""
 
     @property
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24  # 24 hours
     algorithm: str = "HS256"
 
-    # Initial setup token — gates POST /api/auth/setup. Empty disables endpoint.
+    # Initial setup token - gates POST /api/auth/setup. Empty disables endpoint.
     initial_setup_token: str = ""
 
     model_config = SettingsConfigDict(

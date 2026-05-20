@@ -6,14 +6,14 @@ import Avatar from './Avatar';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // Play a US-standard dual-tone ring (440 Hz + 480 Hz, 2 s on / 4 s off)
-// using the Web Audio API — no audio file required.
+// using the Web Audio API - no audio file required.
 //
 // Browser limitations:
 //   Some browsers (Safari < 14) require a user gesture before AudioContext
 //   can play; in that case the modal will appear silently. The visual ring
 //   still pulses to draw attention.
 //
-// Each IncomingCallContent mounts its own ringtone — so a second queued call
+// Each IncomingCallContent mounts its own ringtone - so a second queued call
 // card rings independently, giving the user an audible cue about call count.
 function useRingtone() {
   useEffect(() => {
@@ -68,8 +68,8 @@ function useRingtone() {
 }
 
 // Single incoming call card.
-// hasActiveCall — there is already a live call; "Hold & Answer" is offered instead of "Accept"
-// hasHeldCall   — a call is already on hold; "Hold & Answer" is disabled (max 1 held call)
+// hasActiveCall - there is already a live call; "Hold & Answer" is offered instead of "Accept"
+// hasHeldCall   - a call is already on hold; "Hold & Answer" is disabled (max 1 held call)
 function IncomingCallContent({ incomingCall, hasActiveCall, hasHeldCall, onAccept, onReject, onHoldAndAnswer }) {
   useRingtone();
 
@@ -161,7 +161,7 @@ function IncomingCallContent({ incomingCall, hasActiveCall, hasHeldCall, onAccep
               Incoming Call
             </div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>
-              {hasActiveCall ? (canHoldAndAnswer ? 'Call waiting' : 'Can\'t answer — hold occupied') : 'Ringing…'}
+              {hasActiveCall ? (canHoldAndAnswer ? 'Call waiting' : 'Can\'t answer - hold occupied') : 'Ringing…'}
             </div>
           </div>
         </div>
@@ -189,7 +189,7 @@ function IncomingCallContent({ incomingCall, hasActiveCall, hasHeldCall, onAccep
             borderTop: '1px solid rgba(226,232,240,0.55)',
           }}
         >
-          {/* Decline — always available */}
+          {/* Decline - always available */}
           <button
             onClick={onReject}
             style={{

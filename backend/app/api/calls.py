@@ -218,7 +218,7 @@ def _call_for_recording(db: Session, user_id: int, call_sid: str | None) -> Call
     """Return the specific Call row targeted by a recording control request.
 
     Strategy:
-      1. If ``call_sid`` is provided AND matches a row, use it (precise — the
+      1. If ``call_sid`` is provided AND matches a row, use it (precise - the
          M-07 ideal: with parallel/queued calls we record the right one).
       2. Otherwise fall back to the user's most-recent unended call. This is
          needed because the Telnyx WebRTC SDK's ``activeCall.id`` is the SIP
@@ -240,7 +240,7 @@ def _call_for_recording(db: Session, user_id: int, call_sid: str | None) -> Call
             return call
 
     # Fallback: most-recent active call for this user. Trades exactness for
-    # reliability — see docstring above.
+    # reliability - see docstring above.
     call = (
         db.query(Call)
         .filter(
@@ -265,7 +265,7 @@ def start_recording(
 ):
     """Start recording the specified active call via Telnyx Call Control.
 
-    The Telnyx CallSid (stored in Call.call_sid) doubles as the call_control_id —
+    The Telnyx CallSid (stored in Call.call_sid) doubles as the call_control_id -
     Telnyx uses one identifier across both TeXML and Call Control paradigms.
     """
     call = _call_for_recording(db, current_user.id, payload.call_sid)
@@ -433,7 +433,7 @@ def get_recording_url(
             status_code=404,
             detail="Recording is no longer available from Telnyx",
         )
-    # Refresh the cached URL opportunistically — saves a round-trip if the
+    # Refresh the cached URL opportunistically - saves a round-trip if the
     # same user replays within the next ten minutes.
     call.recording_url = url
     try:

@@ -293,7 +293,7 @@ function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
       .catch((err) => {
         if (cancelled) return;
         const status = err.response?.status;
-        // 404 — never existed; 410 — existed but link expired with no way to refresh.
+        // 404 - never existed; 410 - existed but link expired with no way to refresh.
         if (status === 404 || status === 410) {
           setRecordingError('Recording no longer available.');
         } else {
@@ -303,7 +303,7 @@ function CallDetailPanel({ call, onClose, onCallBack, onMessage, onUpdated }) {
     return () => { cancelled = true; };
   }, [call.id, call.recording_url]);
 
-  // voicemail_url is a raw Telnyx API URL that requires auth — browsers can't
+  // voicemail_url is a raw Telnyx API URL that requires auth - browsers can't
   // load it directly, so we fetch a signed MP3 URL through the backend.
   useEffect(() => {
     setVoicemailSrc(null);

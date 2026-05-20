@@ -34,10 +34,10 @@ const TERMINAL_STATES = new Set(['hangup', 'destroy', 'purge']);
 // rather than "the remote party didn't pick up". The SDK exposes these on
 // the terminal call notification as `call.cause` (string) and `call.causeCode`
 // (numeric Q.850 cause code).
-//   408 NO_USER_RESPONSE / 480 TEMPORARILY_UNAVAILABLE — true no-answer
-//   486 USER_BUSY / 600 BUSY                            — busy
-//   404 UNALLOCATED_NUMBER / 503 SERVICE_UNAVAILABLE    — routing failure
-//   603 DECLINE / 487 REQUEST_TERMINATED                — rejected or cancelled
+//   408 NO_USER_RESPONSE / 480 TEMPORARILY_UNAVAILABLE - true no-answer
+//   486 USER_BUSY / 600 BUSY                            - busy
+//   404 UNALLOCATED_NUMBER / 503 SERVICE_UNAVAILABLE    - routing failure
+//   603 DECLINE / 487 REQUEST_TERMINATED                - rejected or cancelled
 const FAILURE_CAUSES = new Set([
   'CALL_REJECTED',
   'UNALLOCATED_NUMBER',
@@ -275,7 +275,7 @@ export function TelnyxProvider({ children }) {
           // ── Ringing ──────────────────────────────────────────────────────
           if (state === 'ringing') {
             if (call.direction === 'inbound') {
-              // Guard: SDK re-fires 'ringing' after answer() — ignore it.
+              // Guard: SDK re-fires 'ringing' after answer() - ignore it.
               // H-11: push to queue rather than replace.
               if (!cancelled && answeredCallIdRef.current !== call.id) {
                 setIncomingCalls(prev =>
@@ -315,7 +315,7 @@ export function TelnyxProvider({ children }) {
             // H-11: guard which call is terminating before touching refs.
             // In single-call mode activeCallRef.current was always the terminating
             // call, but in multi-call mode it may be the held call or an incoming
-            // call that was never made active — we must not null out the wrong ref.
+            // call that was never made active - we must not null out the wrong ref.
             releaseLocalMedia(call);
             const isActiveCall = activeCallRef.current?.id === call.id;
             const isHeldCall   = heldCallRef.current?.call?.id === call.id;
@@ -451,7 +451,7 @@ export function TelnyxProvider({ children }) {
         remoteElement: audioRef.current || undefined,
       });
     } catch (err) {
-      console.error('[Telnyx] newCall() failed — releasing mic and resetting state', err);
+      console.error('[Telnyx] newCall() failed - releasing mic and resetting state', err);
       releaseLocalMedia(null);
       micStreamRef.current = null;
       clearCallState();
@@ -464,7 +464,7 @@ export function TelnyxProvider({ children }) {
 
     callTimeoutRef.current = setTimeout(() => {
       if (activeCallRef.current && !wasConnectedRef.current) {
-        _forceCleanup('Call timed out — no answer.');
+        _forceCleanup('Call timed out - no answer.');
       }
     }, 45_000);
 
@@ -506,7 +506,7 @@ export function TelnyxProvider({ children }) {
     });
     setIncomingCalls(prev => prev.filter(c => c.id !== call.id));
     setMuted(false);
-  }, []); // all values from args or refs — no state deps
+  }, []); // all values from args or refs - no state deps
 
   // H-11: rejectIncoming now takes the specific call to reject
   const rejectIncoming = useCallback((call) => {
@@ -547,7 +547,7 @@ export function TelnyxProvider({ children }) {
     });
     setIncomingCalls(prev => prev.filter(c => c.id !== newCall.id));
     setMuted(false);
-  }, []); // all from refs/args — no state deps
+  }, []); // all from refs/args - no state deps
 
   // H-11: swap held↔active. When there is an active call it is put on hold;
   // when there is no active call the held call is simply resumed.
@@ -570,7 +570,7 @@ export function TelnyxProvider({ children }) {
     setActiveCallInfo(held.info);
     setActiveCallSdkState(null);
     setMuted(false);
-  }, []); // all from refs — no state deps
+  }, []); // all from refs - no state deps
 
   const hangup = useCallback(() => {
     clearTimeout(callTimeoutRef.current);
@@ -658,7 +658,7 @@ export function TelnyxProvider({ children }) {
 
   return (
     <TelnyxContext.Provider value={value}>
-      {/* Hidden audio element — remote party's voice plays here */}
+      {/* Hidden audio element - remote party's voice plays here */}
       <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
       <CallNotificationToast
         notification={callNotification}

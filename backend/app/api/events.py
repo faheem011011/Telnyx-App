@@ -1,4 +1,4 @@
-"""SSE streaming endpoint — real-time push to authenticated browser clients."""
+"""SSE streaming endpoint - real-time push to authenticated browser clients."""
 import asyncio
 import logging
 

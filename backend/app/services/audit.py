@@ -1,4 +1,4 @@
-"""Audit logging — records every admin action to the database."""
+"""Audit logging - records every admin action to the database."""
 import logging
 import re
 
@@ -57,7 +57,7 @@ def log_audit(
 
     Using a separate session guarantees the record is committed even if the
     caller's transaction is later rolled back. Failures are logged but never
-    propagated — audit must not break the primary operation.
+    propagated - audit must not break the primary operation.
     """
     from app.database import SessionLocal  # local import avoids circular dependency
 

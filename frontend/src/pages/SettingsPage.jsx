@@ -24,7 +24,7 @@ export default function SettingsPage() {
           <p className="text-sm text-muted mt-1">Manage your profile</p>
         </header>
 
-        {/* Profile — name is editable inline; email & phone stay read-only */}
+        {/* Profile - name is editable inline; email & phone stay read-only */}
         <Section title="Profile">
           <NameField user={user} onSaved={refreshUser} />
           <Field label="Email" icon={Mail}>{user?.email}</Field>
@@ -33,10 +33,10 @@ export default function SettingsPage() {
           </Field>
         </Section>
 
-        {/* Change password — available to every authenticated user */}
+        {/* Change password - available to every authenticated user */}
         <ChangePasswordSection onChanged={logout} />
 
-        {/* Admin self-management — change own team, assign own number */}
+        {/* Admin self-management - change own team, assign own number */}
         {isAdmin && (
           <>
             <DepartmentEditor user={user} onSaved={refreshUser} />
@@ -73,7 +73,7 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        {/* Links — admin only */}
+        {/* Links - admin only */}
         {isAdmin && (
           <Section title="Resources">
             <a
@@ -359,7 +359,7 @@ function NameField({ user, onSaved }) {
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <div className="text-sm font-medium mt-0.5 truncate">{user?.name || '—'}</div>
+            <div className="text-sm font-medium mt-0.5 truncate">{user?.name || '-'}</div>
             <button
               onClick={() => setEditing(true)}
               className="text-xs text-brand-600 hover:underline ml-2"
@@ -410,7 +410,7 @@ function ChangePasswordSection({ onChanged }) {
     try {
       await authApi.changePassword(oldPwd, newPwd);
       setDone(true);
-      // The backend bumped token_version — every JWT for this user is now
+      // The backend bumped token_version - every JWT for this user is now
       // invalid. Sign the user out so the next request doesn't 401.
       setTimeout(() => onChanged?.(), 1200);
     } catch (err) {

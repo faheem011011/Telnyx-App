@@ -1,4 +1,4 @@
-"""Telnyx TeXML webhook endpoints — all served under /api/telnyx/*.
+"""Telnyx TeXML webhook endpoints - all served under /api/telnyx/*.
 
 These URLs are called by Telnyx's infrastructure, never the frontend.
 
@@ -27,9 +27,9 @@ Internal action URLs (set in code, not in the Telnyx Console):
 =============================================================
 
 Multi-tenant routing:
-  Outbound calls  — user resolved from SIP identity or caller number
-  Inbound calls   — user resolved by matching PhoneNumber to the "To" number
-  No fallback to a "primary user" — calls/SMS that cannot be routed to a
+  Outbound calls  - user resolved from SIP identity or caller number
+  Inbound calls   - user resolved by matching PhoneNumber to the "To" number
+  No fallback to a "primary user" - calls/SMS that cannot be routed to a
   specific tenant are dropped or sent to voicemail.
 """
 import json
@@ -62,7 +62,7 @@ router = APIRouter(prefix="/api/telnyx", tags=["telnyx-webhooks"])
 
 
 # Reject events whose timestamp is more than this many seconds away from now (C-01).
-_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 3900  # 65 min — covers Telnyx's full retry schedule (max retry at 60 min)
+_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 3900  # 65 min - covers Telnyx's full retry schedule (max retry at 60 min)
 
 # M-09: explicit allowlist of call statuses the application understands.
 # Any value Telnyx sends that is not in this set is mapped to "failed" and
@@ -115,7 +115,7 @@ def _xml(content: str) -> Response:
 
 
 def _normalize_recording_url(url: str) -> str:
-    # Telnyx recording URLs are complete API URLs — do NOT append .mp3.
+    # Telnyx recording URLs are complete API URLs - do NOT append .mp3.
     # Only apply the extension fix for legacy Twilio-style short paths.
     if not url:
         return url
@@ -129,7 +129,7 @@ def _normalize_e164(raw) -> str:
 
     Returns "" when the input is empty, a SIP-credential string (e.g.
     ``gencredAbc123``), or otherwise not a pure E.164 candidate. The check
-    below the call site uses an empty result to skip the leg — never silently
+    below the call site uses an empty result to skip the leg - never silently
     drop a bare-digit PSTN number just because Telnyx omitted the "+".
     """
     if raw is None:
@@ -140,7 +140,7 @@ def _normalize_e164(raw) -> str:
     # Strip any leading "+" so we can validate the body as digits-only.
     body = s[1:] if s.startswith("+") else s
     if not body.isdigit():
-        return ""  # Contains letters (SIP-cred) or punctuation — not E.164.
+        return ""  # Contains letters (SIP-cred) or punctuation - not E.164.
     if not (7 <= len(body) <= 15):
         return ""  # E.164 spec: 7–15 digits inclusive.
     return f"+{body}"
@@ -153,7 +153,7 @@ def _normalize_e164(raw) -> str:
 def _resolve_user_by_to_number(to_number: str, db: Session) -> User | None:
     """Look up the user who owns the Telnyx number that received the call or SMS.
 
-    C-03: returns None when the inbound number is not assigned to any tenant —
+    C-03: returns None when the inbound number is not assigned to any tenant -
     no fallback to a "primary user". Callers must handle None gracefully.
 
     C-08: PhoneNumber.assigned_to_user_id is the single authoritative source of
@@ -189,7 +189,7 @@ def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
     that misses, fall back to ``User.phone_number`` (covers configs where
     Telnyx populates the From field with the caller's E.164).
 
-    C-03: returns None when the identity does not resolve — no fallback to
+    C-03: returns None when the identity does not resolve - no fallback to
     the "primary user". Callers must handle None gracefully.
     """
     if not from_field:
@@ -218,7 +218,7 @@ def _resolve_user_by_caller(from_field: str, db: Session) -> User | None:
     if user:
         return user
 
-    # Fallback: match by phone_number — some Telnyx app configs populate
+    # Fallback: match by phone_number - some Telnyx app configs populate
     # the From field with the caller's E.164 instead of the SIP username.
     user = (
         db.query(User)
@@ -247,7 +247,7 @@ def _verify_telnyx_signature(request: Request, raw_body: bytes) -> None:
     Use on Call Control v2 / Messaging webhooks (e.g. /incoming-sms,
     /recording-event). DO NOT call this on TeXML form-encoded webhooks
     (/outbound-call, /incoming-call, /post-dial, /call-status,
-    /voicemail-complete, /voicemail-transcription) — Telnyx's TeXML
+    /voicemail-complete, /voicemail-transcription) - Telnyx's TeXML
     application does not include the Telnyx-Signature-Ed25519 header on
     those deliveries, so verification will always 403 legitimate requests
     and the call/SMS flow will silently fail.
@@ -261,7 +261,7 @@ def _verify_telnyx_signature(request: Request, raw_body: bytes) -> None:
     webhook source IPs.
 
     Behavior on JSON routes:
-      • Refuse-by-default when settings.telnyx_public_key is missing — no
+      • Refuse-by-default when settings.telnyx_public_key is missing - no
         silent skip in production.
       • Verify the Ed25519 signature.
       • Enforce a 5-minute replay window using the telnyx-timestamp header,
@@ -270,7 +270,7 @@ def _verify_telnyx_signature(request: Request, raw_body: bytes) -> None:
     """
     if not settings.telnyx_public_key:
         log.critical(
-            "Telnyx webhook public key is not configured — refusing webhook. "
+            "Telnyx webhook public key is not configured - refusing webhook. "
             "Set TELNYX_PUBLIC_KEY in the environment to enable signature "
             "verification."
         )
@@ -281,7 +281,7 @@ def _verify_telnyx_signature(request: Request, raw_body: bytes) -> None:
     sig_header = request.headers.get("telnyx-signature-ed25519", "")
     timestamp = request.headers.get("telnyx-timestamp", "")
 
-    # Replay-window check on the timestamp header — Telnyx SDK does not do this.
+    # Replay-window check on the timestamp header - Telnyx SDK does not do this.
     try:
         ts_int = int(timestamp)
     except (TypeError, ValueError):
@@ -319,9 +319,9 @@ def _claim_event(db: Session, event_id: str, event_type: str) -> bool:
 
     Inserts a row immediately so concurrent retries hit the unique constraint.
     The row is flushed into the caller's open transaction rather than committed
-    immediately — the caller's own db.commit() then persists the WebhookEvent
+    immediately - the caller's own db.commit() then persists the WebhookEvent
     together with all subsequent writes atomically (C-04 fix).
-    Pass an empty event_id when no usable identifier exists — in that case we
+    Pass an empty event_id when no usable identifier exists - in that case we
     cannot dedupe, so we allow the event through.
     """
     if not event_id:
@@ -353,7 +353,7 @@ def _texml_event_id(route_name: str, form_data: dict) -> str:
     ts       = form_data.get("Timestamp") or form_data.get("ApiVersion") or ""
     if from_num and to_num:
         return f"{route_name}:{from_num}:{to_num}:{ts}"
-    return ""  # Still empty — _claim_event will allow through as before
+    return ""  # Still empty - _claim_event will allow through as before
 
 
 # ---------------------------------------------------------------------------
@@ -465,15 +465,15 @@ async def _handle_outbound_call_texml(request: Request, db: Session) -> Response
 #        from = user's caller-id phone number (per WebRTC SDK callerNumber)
 #        to   = destination phone number (E.164)
 #   3. We resolve the user, persist a Call row, then issue:
-#        POST /v2/calls/{id}/actions/answer    — accept the SIP leg
-#        POST /v2/calls/{id}/actions/transfer  — atomically dials & bridges PSTN
+#        POST /v2/calls/{id}/actions/answer    - accept the SIP leg
+#        POST /v2/calls/{id}/actions/transfer  - atomically dials & bridges PSTN
 #   4. Telnyx fires call.answered when destination picks up; we update status.
 #   5. Telnyx fires call.hangup when either side hangs up; we mark Call ended.
 #
 # The same webhook also receives events for the secondary leg of inbound
 # calls (TeXML's <Dial><Sip/></Dial> creates an outbound-direction SIP leg
 # from Telnyx's perspective, also fires events here). We distinguish by
-# checking whether ``to`` looks like an E.164 number — only PSTN-bound calls
+# checking whether ``to`` looks like an E.164 number - only PSTN-bound calls
 # get the dial+transfer treatment; SIP-credential targets are ignored.
 # ---------------------------------------------------------------------------
 
@@ -498,7 +498,7 @@ async def _handle_outbound_call_v2(db: Session, raw_body: bytes) -> Response:
         log.info("outbound-call v2: no call_control_id, ignoring event=%s", event_type)
         return Response(status_code=204)
 
-    # Full payload dump for the three event types we care about — gives us
+    # Full payload dump for the three event types we care about - gives us
     # the hangup_cause / hangup_source / codec / SDP metadata Telnyx delivered
     # without having to re-derive it from a truncated body_first_500 log.
     # Especially useful for diagnosing PSTN-side rejections (STIR/SHAKEN,
@@ -526,7 +526,7 @@ async def _handle_outbound_call_v2(db: Session, raw_body: bytes) -> Response:
 async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str) -> Response:
     """Persist a Call row for the SIP leg of an outbound WebRTC dial.
 
-    IMPORTANT — do NOT issue ``answer`` + ``transfer`` here.
+    IMPORTANT - do NOT issue ``answer`` + ``transfer`` here.
 
     Telnyx Credential Connections auto-bridge SDK SIP INVITEs to PSTN the
     moment the INVITE arrives with a PSTN-shaped To header. Two
@@ -538,15 +538,15 @@ async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str)
         headers, same ``call_session_id`` as the SIP leg).
 
     We persist a Call row only for the SIP leg and let Telnyx handle the
-    bridge. Calling ``answer`` + ``transfer`` on top of the auto-bridge —
-    which the previous version of this handler did — tears down Telnyx's
+    bridge. Calling ``answer`` + ``transfer`` on top of the auto-bridge -
+    which the previous version of this handler did - tears down Telnyx's
     bridge mid-setup and produces the "destination phone rings for ~1s
     then disconnects, logged as a missed call" symptom.
     """
     calling_party_type = (payload.get("calling_party_type") or "").lower()
 
     # Skip the auto-bridged PSTN leg entirely. Same session, but it's
-    # Telnyx's internal bridge plumbing — we don't own it.
+    # Telnyx's internal bridge plumbing - we don't own it.
     if calling_party_type != "sip":
         log.info(
             "v2: skipping non-SIP call.initiated (calling_party_type=%r, state=%r)",
@@ -558,7 +558,7 @@ async def _v2_handle_initiated(db: Session, payload: dict, call_control_id: str)
     to_field = _normalize_e164(payload.get("to"))
 
     # SIP-credential targets (e.g. 'gencredAbc...') return "" from
-    # _normalize_e164 — those are the secondary leg of an inbound call and
+    # _normalize_e164 - those are the secondary leg of an inbound call and
     # are handled by the TeXML inbound flow, not this path.
     if not to_field:
         log.info("v2: skipping non-PSTN call.initiated (to=%r)", payload.get("to"))
@@ -643,7 +643,7 @@ def _v2_handle_hangup(db: Session, payload: dict, call_control_id: str) -> Respo
         elif hangup_cause in ("originator_cancel",):
             call.status = "canceled"
         else:
-            # Default — keep current unless still 'initiated'/'ringing'
+            # Default - keep current unless still 'initiated'/'ringing'
             if call.status in ("initiated", "ringing", None):
                 call.status = "failed"
 
@@ -675,7 +675,7 @@ def _v2_handle_hangup(db: Session, payload: dict, call_control_id: str) -> Respo
 async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     """Handle an incoming PSTN call to the Telnyx phone number."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
-    # this Telnyx app config — see _verify_telnyx_signature docstring.
+    # this Telnyx app config - see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -690,7 +690,7 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     user = _resolve_user_by_to_number(to_number, db)
 
     # C-03: if no user owns this number, do NOT persist a Call row owned by
-    # anyone — just send the caller to voicemail.
+    # anyone - just send the caller to voicemail.
     if not user:
         log.warning("No user found for To=%s; sending to voicemail", to_number)
         return _xml(build_voicemail_texml())
@@ -701,7 +701,7 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
     # doesn't sit in "ringing" forever.
     if not user.telnyx_sip_username:
         log.warning(
-            "User %s has no Telnyx SIP username yet — they have not logged in "
+            "User %s has no Telnyx SIP username yet - they have not logged in "
             "since the credential was created. Inbound call cannot ring the "
             "browser; voicemail will capture it.",
             user.id,
@@ -761,7 +761,7 @@ async def handle_incoming_call(request: Request, db: Session = Depends(get_db)):
 async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after <Dial> resolves for an inbound call."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
-    # this Telnyx app config — see _verify_telnyx_signature docstring.
+    # this Telnyx app config - see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -821,7 +821,7 @@ async def handle_post_dial(request: Request, db: Session = Depends(get_db)):
 async def handle_call_status(request: Request, db: Session = Depends(get_db)):
     """Receive call lifecycle status updates from Telnyx."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
-    # this Telnyx app config — see _verify_telnyx_signature docstring.
+    # this Telnyx app config - see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -881,7 +881,7 @@ async def handle_call_status(request: Request, db: Session = Depends(get_db)):
 async def handle_voicemail_complete(request: Request, db: Session = Depends(get_db)):
     """Called by Telnyx after a voicemail recording finishes."""
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
-    # this Telnyx app config — see _verify_telnyx_signature docstring.
+    # this Telnyx app config - see _verify_telnyx_signature docstring.
     form = await request.form()
     form_data = dict(form)
 
@@ -931,10 +931,10 @@ async def handle_voicemail_complete(request: Request, db: Session = Depends(get_
 @router.post("/voicemail-transcription")
 @limiter.limit("1000/minute")
 async def handle_voicemail_transcription(request: Request):
-    # Telnyx TeXML <Record> does not support transcription callbacks — this
+    # Telnyx TeXML <Record> does not support transcription callbacks - this
     # endpoint is kept so any stale webhook config doesn't cause 404 errors.
     # TeXML form-encoded webhooks don't carry an Ed25519 signature header in
-    # this Telnyx app config — see _verify_telnyx_signature docstring.
+    # this Telnyx app config - see _verify_telnyx_signature docstring.
     await request.body()
     return Response(status_code=204)
 
@@ -948,7 +948,7 @@ async def handle_voicemail_transcription(request: Request):
 async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
     """Handle Telnyx messaging webhooks (message.received / message.sent / message.finalized / message.failed).
 
-    Telnyx sends JSON for all messaging events — not form-encoded like Twilio.
+    Telnyx sends JSON for all messaging events - not form-encoded like Twilio.
     Payload structure:
       { "data": { "event_type": "...", "payload": { ... } } }
     """
@@ -975,7 +975,7 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
         message_id = payload.get("id")
         to_list = payload.get("to", [])
         status = to_list[0].get("status") if to_list else None
-        # M-03: message.failed may omit to[0].status — fall back to "failed" so
+        # M-03: message.failed may omit to[0].status - fall back to "failed" so
         # the record is never left stuck in "sent"/"queued" after a failure event.
         if event_type == "message.failed" and not status:
             status = "failed"
@@ -1009,7 +1009,7 @@ async def handle_incoming_sms(request: Request, db: Session = Depends(get_db)):
 
     user = _resolve_user_by_to_number(to_number, db)
 
-    # C-03: if no tenant owns this DID, drop the message — do NOT save it
+    # C-03: if no tenant owns this DID, drop the message - do NOT save it
     # against the "primary user".
     if not user:
         log.warning("No user found for inbound SMS to=%s; dropping", to_number)
