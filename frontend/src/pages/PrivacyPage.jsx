@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, ChevronRight, ArrowLeft, Mail, Globe, Lock, Database, Users, FileText, AlertCircle, RefreshCw, Phone } from 'lucide-react';
 
@@ -139,13 +139,14 @@ export default function PrivacyPage() {
               Privacy Policy
             </h1>
             <p className="text-lg text-gray-600 leading-relaxed mb-6">
-              How AlphaBridge Consulting collects, uses, stores, and protects your information
-              through the <strong className="text-gray-800">AlphaCall</strong> platform.
+              How AlphaBridge Consulting collects, uses, stores, and protects information
+              through the <strong className="text-gray-800">AlphaCall</strong> platform — including your
+              rights regarding SMS communications and personal data.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
               <span className="flex items-center gap-1.5">
                 <RefreshCw size={13} />
-                Last updated: May 19, 2026
+                Last updated: May 20, 2026
               </span>
               <span className="flex items-center gap-1.5">
                 <Globe size={13} />
@@ -201,12 +202,20 @@ export default function PrivacyPage() {
               <SectionHeading id="overview" icon={FileText} title="Overview" />
               <div className="mt-5 space-y-4">
                 <p>
-                  AlphaBridge Consulting operates <strong>AlphaCall</strong>, an internal
-                  business communication platform available at{' '}
+                  AlphaBridge Consulting is a California-based staff augmentation and technology hiring company.
+                  We help businesses find and onboard vetted professionals in AI, Data Engineering, DevOps,
+                  and software development through our AI-powered recruitment platform. Internally, we operate{' '}
+                  <strong>AlphaCall</strong>, a web-based calling platform available at{' '}
                   <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
                     phone.alphabridgeconsulting.ai
-                  </a>. This Privacy Policy describes how we collect, use, store, and protect information
-                  in connection with your use of the platform.
+                  </a>
+                  , which our business development team uses to conduct inbound and outbound calls with
+                  recruiters, hiring managers, and prospective clients.
+                </p>
+                <p>
+                  This Privacy Policy describes how we collect, use, store, protect, and share information in
+                  connection with your use of AlphaCall, including all telephony, SMS messaging, and platform
+                  activity data.
                 </p>
                 <HighlightBox type="info">
                   <strong>AlphaCall is an internal business tool.</strong> Access is restricted to authorized AlphaBridge Consulting personnel. By using the platform, you acknowledge and agree to the practices described in this policy.
@@ -219,7 +228,8 @@ export default function PrivacyPage() {
               <SectionHeading id="info-collected" icon={Database} title="Information We Collect" subtitle="Data you provide directly and data we collect automatically" />
               <div className="mt-5 space-y-4">
                 <p>
-                  We collect information necessary to operate AlphaCall and provide reliable business communication services. This falls into two categories:
+                  We collect information necessary to operate AlphaCall and support our staff augmentation
+                  outreach and business development activities. This falls into two categories:
                 </p>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <InfoCard
@@ -228,15 +238,15 @@ export default function PrivacyPage() {
                       'Full name and business email address',
                       'Call recordings and transcripts',
                       'Outbound and inbound text messages',
-                      'Contact details (phone numbers, names)',
-                      'Communication notes and annotations',
+                      'Contact details (phone numbers, company names, titles)',
+                      'Communication notes and call annotations',
                       'Account credentials and profile settings',
                     ]}
                   />
                   <InfoCard
                     title="Automatically Collected Data"
                     items={[
-                      'IP addresses and geolocation data',
+                      'IP addresses and approximate geolocation',
                       'Browser type and device information',
                       'Call metadata (duration, timestamps, direction)',
                       'Session tokens and authentication cookies',
@@ -248,8 +258,8 @@ export default function PrivacyPage() {
                 <p className="text-sm text-gray-600">
                   <strong>Third-Party Processing:</strong> Some data is processed through trusted providers —
                   specifically <strong>Telnyx</strong> for telephony and SMS services, and <strong>Clerk</strong> for
-                  authentication. These providers operate under their own privacy policies and handle data only as
-                  necessary to deliver their services.
+                  authentication. These providers handle data only as necessary to deliver their services and are
+                  contractually bound to protect your information.
                 </p>
               </div>
             </section>
@@ -261,12 +271,12 @@ export default function PrivacyPage() {
                 <p>We use the information we collect for the following purposes:</p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {[
-                    ['Platform Operations', 'To provide, maintain, and improve AlphaCall features and functionality.'],
-                    ['Business Communications', 'To facilitate calls, SMS messages, and contact management for authorized users.'],
-                    ['Record Keeping', 'To maintain communication logs, recordings, and transcripts as required.'],
-                    ['Analytics & Reporting', 'To generate usage analytics and performance dashboards for administrators.'],
-                    ['Security & Access Control', 'To authenticate users, prevent unauthorized access, and enforce security policies.'],
-                    ['Legal Compliance', 'To meet applicable regulatory, legal, and contractual obligations.'],
+                    ['Platform Operations', 'To provide, maintain, and improve AlphaCall features and reliability.'],
+                    ['Business Development Outreach', 'To facilitate calls and SMS follow-ups with recruiters, companies, and prospective clients for staffing and hiring services.'],
+                    ['Record Keeping', 'To maintain communication logs, call recordings, and transcripts as required for quality and compliance.'],
+                    ['Performance Analytics', 'To generate call activity reports and KPI dashboards for administrators to monitor team productivity.'],
+                    ['Security & Access Control', 'To authenticate users, prevent unauthorized access, and enforce role-based security policies.'],
+                    ['Legal Compliance', 'To meet applicable regulatory, legal, and contractual obligations including TCPA and 10DLC requirements.'],
                   ].map(([title, desc]) => (
                     <div key={title} className="flex gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50/50">
                       <ChevronRight size={16} className="text-brand-500 mt-0.5 flex-shrink-0" />
@@ -282,46 +292,146 @@ export default function PrivacyPage() {
 
             {/* SMS Program */}
             <section>
-              <SectionHeading id="sms-program" icon={Phone} title="SMS Communications" subtitle="Our business-to-business SMS program and your opt-out rights" />
-              <div className="mt-5 space-y-4">
+              <SectionHeading id="sms-program" icon={Phone} title="SMS Communications" subtitle="Our B2B SMS program, how consent is collected, and your opt-out rights" />
+              <div className="mt-5 space-y-5">
+
                 <p>
-                  AlphaBridge Consulting operates a <strong>business-to-business (B2B) SMS program</strong> used for
-                  appointment scheduling, follow-ups, and consulting communications. All SMS activity is conducted
-                  through the AlphaCall platform.
+                  AlphaBridge Consulting operates a <strong>business-to-business (B2B) SMS program</strong> through
+                  AlphaCall to support our staff augmentation and technology hiring services. SMS messages are sent
+                  only to recruiters, hiring managers, HR professionals, and prospective clients who have provided
+                  prior express consent, and may include appointment reminders, staffing availability notifications,
+                  follow-ups on consulting proposals, and service updates.
                 </p>
-                <p>
-                  <strong>How we collect SMS consent:</strong> Registered users of AlphaCall provide explicit
-                  SMS opt-in consent during account creation at{' '}
-                  <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
-                    phone.alphabridgeconsulting.ai
-                  </a>
-                  . The registration form includes an unchecked consent checkbox with clear disclosure of
-                  message frequency, applicable rates, opt-out instructions, and links to this Privacy Policy
-                  and the Terms &amp; Conditions. Providing a mobile number and checking the consent box is
-                  optional and is never a condition of platform access.
-                </p>
+
+                {/* How consent is collected */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">How We Collect SMS Consent</h4>
+                  <p className="text-sm text-gray-700 mb-4">
+                    SMS opt-in consent is collected independently from any email or voice call consent — it is
+                    SMS-specific only. Providing a phone number is never required. We collect consent through
+                    one of the following documented methods:
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Website Opt-In Form</p>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Via an opt-in form at{' '}
+                        <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
+                          phone.alphabridgeconsulting.ai
+                        </a>
+                        . The form includes an optional mobile phone number field and an unchecked consent
+                        checkbox that users must actively select. The consent disclosure reads:
+                      </p>
+                      <HighlightBox type="info">
+                        "By checking this box, I consent to receive SMS messages from AlphaBridge Consulting about staffing and consulting services. Message and data rates may apply. Message frequency varies. Reply STOP to opt out, HELP for assistance. View our{' '}
+                        <Link to="/privacypolicy" className="underline font-medium">Privacy Policy</Link>
+                        {' '}and{' '}
+                        <Link to="/termsandconditions" className="underline font-medium">Terms &amp; Conditions</Link>."
+                      </HighlightBox>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Terms and conditions are displayed inline on the page — never via popup.
+                        Checking this box is entirely optional and is not required to access the platform.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Verbal Consent (During Business Calls)</p>
+                      <p className="text-sm text-gray-600">
+                        During inbound or outbound calls, an AlphaBridge Consulting representative may request
+                        explicit verbal consent to send SMS follow-up communications. Verbal consent is documented
+                        by the agent in AlphaCall and retained as a compliance record.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Written Agreement</p>
+                      <p className="text-sm text-gray-600">
+                        Consent may also be obtained via signed contracts, master service agreements (MSAs),
+                        or other written documentation that includes explicit SMS disclosure language.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Keywords */}
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50 text-center">
-                    <p className="text-2xl font-bold text-emerald-600 mb-1">STOP</p>
-                    <p className="text-xs text-emerald-700">Reply to opt out of SMS messages at any time</p>
+                  <div className="p-4 rounded-xl border border-red-100 bg-red-50 text-center">
+                    <p className="text-2xl font-bold text-red-600 mb-1">STOP</p>
+                    <p className="text-xs text-red-700">Reply to opt out of all future SMS messages immediately</p>
                   </div>
                   <div className="p-4 rounded-xl border border-brand-100 bg-brand-50 text-center">
                     <p className="text-2xl font-bold text-brand-600 mb-1">HELP</p>
-                    <p className="text-xs text-brand-700">Reply for assistance or more information</p>
+                    <p className="text-xs text-brand-700">Reply for support contact information and assistance</p>
                   </div>
-                  <div className="p-4 rounded-xl border border-gray-100 bg-gray-50 text-center">
-                    <p className="text-2xl font-bold text-gray-600 mb-1">No Sale</p>
-                    <p className="text-xs text-gray-600">We never sell or share phone numbers for marketing</p>
+                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50 text-center">
+                    <p className="text-2xl font-bold text-emerald-600 mb-1">START</p>
+                    <p className="text-xs text-emerald-700">Reply to re-subscribe after a previous opt-out</p>
                   </div>
                 </div>
+
+                {/* Sample messages */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">Sample Message Templates</h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    The following messages represent the actual SMS communications sent through AlphaCall.
+                    All messages identify AlphaBridge Consulting as the sender.
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-2">Opt-In Confirmation</p>
+                      <p className="text-sm font-mono text-emerald-900 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-emerald-100">
+                        "AlphaBridge Consulting: You're confirmed for staffing & hiring updates. Msg & data rates may apply. Msg freq varies. Reply STOP to opt out, HELP for info."
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-brand-100 bg-brand-50 p-4">
+                      <p className="text-xs font-bold text-brand-700 uppercase tracking-wide mb-2">HELP Response</p>
+                      <p className="text-sm font-mono text-brand-900 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-brand-100">
+                        "AlphaBridge Consulting: For help, email legal@alphabridgeconsulting.ai or visit alphabridgeconsulting.com. Msg & data rates may apply. Reply STOP to unsubscribe."
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-red-100 bg-red-50 p-4">
+                      <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">STOP / Opt-Out Confirmation</p>
+                      <p className="text-sm font-mono text-red-900 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-red-100">
+                        "AlphaBridge Consulting: You've been unsubscribed. No further messages will be sent. Reply START to opt back in."
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Sample Outreach Message</p>
+                      <p className="text-sm font-mono text-gray-800 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-gray-200">
+                        "AlphaBridge Consulting: Hi [Name], we have vetted AI/DevOps engineers available for placement. Interested in a quick call? Reply STOP to opt out."
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Critical non-sharing statement */}
                 <HighlightBox type="success">
-                  <strong>SMS Opt-In Data Notice:</strong> AlphaBridge Consulting does <strong>not</strong> sell,
-                  share, or transfer SMS opt-in data, consent records, phone numbers, or message content to
-                  third parties or affiliates for marketing or promotional purposes. SMS opt-in information
-                  is used solely to deliver the platform notifications you have requested. Limited data
-                  sharing with Telnyx (our telephony service provider) is permitted only to the extent
-                  necessary to transmit or receive messages on your behalf.
+                  <p className="font-semibold mb-2">SMS Opt-In Data — No Sharing, No Selling</p>
+                  <p>
+                    AlphaBridge Consulting does <strong>NOT</strong> sell, share, rent, or transfer SMS opt-in data,
+                    consent records, phone numbers, or message content to any third party, affiliate, or partner for
+                    marketing or promotional purposes. This prohibition applies to all personally identifiable
+                    information collected in connection with SMS consent, including mobile numbers and message
+                    history. SMS opt-in information is used solely to deliver the communications you have
+                    explicitly requested. Limited data sharing with <strong>Telnyx</strong> (our telephony carrier)
+                    is permitted only to the extent strictly necessary to transmit or receive messages on your
+                    behalf, and Telnyx is contractually bound to protect this data and may not use it for any
+                    other purpose.
+                  </p>
                 </HighlightBox>
+
+                <p className="text-sm text-gray-600">
+                  <strong>Message and data rates may apply.</strong> Message frequency varies based on business
+                  activity and recipient engagement. For full SMS compliance details, see our{' '}
+                  <Link to="/termsandconditions" className="text-brand-600 hover:underline font-medium">
+                    Terms of Service — Section 4
+                  </Link>.
+                </p>
               </div>
             </section>
 
@@ -330,13 +440,14 @@ export default function PrivacyPage() {
               <SectionHeading id="sharing" icon={Users} title="Information Sharing" subtitle="When and with whom we may share your data" />
               <div className="mt-5 space-y-4">
                 <p>
-                  We do not sell your personal information. Information may only be shared in the following limited circumstances:
+                  We do not sell your personal information. We do not share SMS opt-in data or phone numbers for
+                  third-party marketing. Information may only be shared in the following strictly limited circumstances:
                 </p>
                 <div className="space-y-3">
                   {[
                     {
                       title: 'Trusted Service Providers',
-                      desc: 'We share data with vetted vendors (e.g., Telnyx for telephony, Clerk for authentication) solely to deliver platform services. These providers are contractually bound to protect your data.',
+                      desc: 'We share data with vetted vendors (e.g., Telnyx for telephony and SMS delivery, Clerk for authentication) solely to deliver platform services. These providers are contractually bound to protect your data and may not use it for independent marketing or any unrelated purpose.',
                     },
                     {
                       title: 'Legal & Regulatory Compliance',
@@ -344,7 +455,7 @@ export default function PrivacyPage() {
                     },
                     {
                       title: 'Business Transfers',
-                      desc: 'In the event of a merger, acquisition, or sale of assets, user data may be transferred as part of that transaction. We will provide notice before any such transfer.',
+                      desc: 'In the event of a merger, acquisition, or sale of assets, user data may be transferred as part of that transaction. We will provide advance notice before any such transfer affects your data.',
                     },
                   ].map(({ title, desc }) => (
                     <div key={title} className="flex gap-4 p-4 rounded-xl border border-gray-100">
@@ -378,7 +489,7 @@ export default function PrivacyPage() {
                     <tbody className="divide-y divide-gray-50">
                       {[
                         ['Call Recordings & Transcripts', 'Up to 12 months (longer if legally required)'],
-                        ['SMS Message Content', 'Duration of business relationship'],
+                        ['SMS Message Content & Consent Records', 'Duration of business relationship; consent records retained for compliance'],
                         ['Account & Profile Data', 'Duration of access + reasonable period after termination'],
                         ['Usage & Activity Logs', 'Up to 90 days for operational purposes'],
                         ['Authentication Tokens', 'Session duration only'],
@@ -417,7 +528,7 @@ export default function PrivacyPage() {
                 </div>
                 <HighlightBox type="warning">
                   <AlertCircle size={14} className="inline mr-1.5 mb-0.5" />
-                  <strong>Important:</strong> While we employ robust security practices, no system can guarantee absolute security. We encourage users to use strong passwords, protect their credentials, and report any suspected security issues immediately.
+                  <strong>Important:</strong> While we employ robust security practices, no system can guarantee absolute security. We encourage users to use strong passwords, protect their credentials, and report any suspected security issues immediately to <a href="mailto:legal@alphabridgeconsulting.ai" className="underline font-medium">legal@alphabridgeconsulting.ai</a>.
                 </HighlightBox>
               </div>
             </section>
@@ -449,10 +560,12 @@ export default function PrivacyPage() {
                   ))}
                 </div>
                 <p className="text-sm text-gray-600">
-                  To exercise any of these rights, contact us at{' '}
+                  To exercise any of these rights, or to opt out of SMS communications, contact us at{' '}
                   <a href="mailto:legal@alphabridgeconsulting.ai" className="text-brand-600 hover:underline font-medium">
                     legal@alphabridgeconsulting.ai
-                  </a>. We will respond within a reasonable timeframe in accordance with applicable law.
+                  </a>
+                  . You may also reply <strong>STOP</strong> to any SMS message to immediately unsubscribe.
+                  We will respond within a reasonable timeframe in accordance with applicable law.
                 </p>
               </div>
             </section>
@@ -482,7 +595,8 @@ export default function PrivacyPage() {
                 </p>
                 <p>
                   Continued use of AlphaCall after any revision constitutes your acceptance of the updated policy.
-                  We encourage authorized users to review this policy periodically.
+                  We encourage authorized users to review this policy periodically. For material changes affecting
+                  SMS programs or data sharing practices, we will make reasonable efforts to notify affected users.
                 </p>
               </div>
             </section>
@@ -497,7 +611,7 @@ export default function PrivacyPage() {
                     style={{ background: 'linear-gradient(135deg, #07438C 0%, #1C94AE 100%)' }}
                   >
                     <h3 className="text-lg font-bold mb-1">Have questions about your privacy?</h3>
-                    <p className="text-sm text-white/80">Our team is here to help with any data or privacy inquiries.</p>
+                    <p className="text-sm text-white/80">Our team is here to help with any data, privacy, or SMS opt-out inquiries.</p>
                   </div>
                   <div className="p-6 bg-gray-50 grid sm:grid-cols-2 gap-4">
                     <div>
@@ -517,8 +631,8 @@ export default function PrivacyPage() {
                       <p className="text-sm text-gray-700">AlphaBridge Consulting</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Platform</p>
-                      <p className="text-sm text-gray-700">AlphaCall</p>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">SMS Opt-Out</p>
+                      <p className="text-sm text-gray-700">Reply <strong>STOP</strong> to any message or email legal@alphabridgeconsulting.ai</p>
                     </div>
                   </div>
                 </div>
