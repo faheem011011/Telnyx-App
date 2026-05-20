@@ -48,11 +48,11 @@ function fmtNum(n) {
   return Number(n).toLocaleString();
 }
 function fmtDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 function fmtTime(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 function fmtShortDate(iso) {
@@ -156,7 +156,7 @@ function ChartTooltip({ active, payload, label, bg, border, text }) {
 // ─── Change Badge ──────────────────────────────────────────────────────────────
 
 function ChangeBadge({ change }) {
-  if (change === null || change === undefined) return <span className="text-[11px] text-zinc-400">— vs prev</span>;
+  if (change === null || change === undefined) return <span className="text-[11px] text-zinc-400">- vs prev</span>;
   if (change === 0) return <span className="text-[11px] text-zinc-400">No change</span>;
   const up = change > 0;
   return (
@@ -458,7 +458,7 @@ function TopAreaCodesCards({ data, colors }) {
               border:     '1.5px dashed rgba(0,0,0,0.08)',
               background: 'rgba(0,0,0,0.015)',
             }}>
-            {/* Rank badge — dimmed */}
+            {/* Rank badge - dimmed */}
             <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs"
               style={{
                 background: 'rgba(0,0,0,0.05)',
@@ -674,7 +674,7 @@ export default function DashboardPage() {
   // Initial + filter-change load
   useEffect(() => { fetchData(false); }, [fetchData]);
 
-  // 30-second polling — skipped when the tab is hidden to avoid wasted DB queries.
+  // 30-second polling - skipped when the tab is hidden to avoid wasted DB queries.
   // Resumes immediately (no waiting for the next tick) when the tab becomes visible.
   useEffect(() => {
     if (range === 'custom') return;
@@ -904,7 +904,7 @@ export default function DashboardPage() {
                 {/*
                   The `<select>` itself renders on the blue gradient header so its
                   selected text is white. When the menu is open the browser pops
-                  the options on a white system surface — white text would be
+                  the options on a white system surface - white text would be
                   invisible. Style each <option> with the brand blue
                   (#07438C, the start stop of the gradient) so the menu list
                   reads as gradient-blue while open, then snaps back to white

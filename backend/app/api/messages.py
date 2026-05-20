@@ -254,7 +254,7 @@ def send_message(
     db.commit()
     db.refresh(msg)
     # M-18: echo client_id back so the frontend can dedup by UUID, not body+direction.
-    # client_id is never written to the DB — model_copy injects it only in the response.
+    # client_id is never written to the DB - model_copy injects it only in the response.
     out = MessageOut.model_validate(msg)
     return out.model_copy(update={"client_id": payload.client_id})
 

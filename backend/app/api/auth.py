@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Per-email rate limiting for password reset — max 3 requests per hour per address.
+# Per-email rate limiting for password reset - max 3 requests per hour per address.
 # In-memory only; resets on process restart, which is acceptable for this use-case.
 _reset_attempts: dict[str, list] = defaultdict(list)
 _RESET_EMAIL_MAX = 3
@@ -104,7 +104,7 @@ def update_me(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserOut:
-    """Self-service profile update — currently just the display name.
+    """Self-service profile update - currently just the display name.
 
     Email/role/department/phone changes intentionally stay on the admin
     endpoint so they're auditable and authorised.
@@ -129,7 +129,7 @@ def change_password(
 
     Caller must supply their current password. On success we bump
     token_version which invalidates *every* outstanding JWT for this user
-    on the next request, including this caller's — the frontend therefore
+    on the next request, including this caller's - the frontend therefore
     needs to send the user back to /login after a 204 response.
     """
     if not current_user.hashed_password or not verify_password(
@@ -242,7 +242,7 @@ def forgot_password(
     ).first()
 
     if not user:
-        # Do not signal whether the address exists — silently no-op.
+        # Do not signal whether the address exists - silently no-op.
         return
 
     if not _reset_email_allowed(user.email):

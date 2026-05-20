@@ -205,7 +205,7 @@ export default function SetupPage() {
           }
         />
 
-        {/* SMS compliance notice — required for 10DLC opt-in disclosure */}
+        {/* SMS compliance notice - required for 10DLC opt-in disclosure */}
         <div className="w-full max-w-sm mx-auto mt-2 px-4 py-3 rounded-xl border border-gray-100 bg-gray-50">
           <p className="text-[11px] text-gray-500 leading-relaxed text-center">
             By creating an account you agree to receive SMS notifications from{' '}

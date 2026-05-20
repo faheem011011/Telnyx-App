@@ -23,7 +23,7 @@ export function formatPhone(raw) {
 
 /**
  * Normalize a phone number to E.164 (+1XXXXXXXXXX for US, or international
- * +<country><subscriber> for non-US). Returns '' for invalid input — caller
+ * +<country><subscriber> for non-US). Returns '' for invalid input - caller
  * must handle empty.
  */
 export function toE164(raw) {

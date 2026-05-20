@@ -2,7 +2,7 @@
 
 This is a metadata-only rename (Postgres ALTER TABLE / ALTER COLUMN RENAME).
 No data is rewritten. Safe to run on a live DB but requires that no app
-instance is mid-flight using the old names — coordinate with deploy.
+instance is mid-flight using the old names - coordinate with deploy.
 
 WARNING: this migration is not safely reversible without downtime once
 applications have been deployed expecting the new names. Plan deploy and

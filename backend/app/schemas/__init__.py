@@ -106,7 +106,7 @@ class ChangePasswordRequest(BaseModel):
 
 class UpdateMeRequest(BaseModel):
     """Self-service profile patch. Only the user's own display name is
-    editable here — role, email, phone, and department changes must go
+    editable here - role, email, phone, and department changes must go
     through the admin endpoints so they can be audited."""
     name: str = Field(..., min_length=1, max_length=255)
 
@@ -131,7 +131,7 @@ class UserOut(BaseModel):
 
 
 # ============================================================
-# Admin — User management
+# Admin - User management
 # ============================================================
 class UserAdminCreate(BaseModel):
     email: EmailStr
@@ -185,7 +185,7 @@ class UserWithNumbersOut(BaseModel):
 
 
 # ============================================================
-# Admin — phone number management
+# Admin - phone number management
 # ============================================================
 class PhoneNumberOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -295,7 +295,7 @@ class CallUpdate(BaseModel):
 
 
 class RecordingControlRequest(BaseModel):
-    """Body for /api/calls/recording/start|stop — identifies the exact call to
+    """Body for /api/calls/recording/start|stop - identifies the exact call to
     (un)record by its Telnyx CallSid (which is what the WebRTC SDK exposes as
     ``activeCall.id``). Required so parallel/queued calls don't race on the
     "most recent unended call" heuristic (M-07).

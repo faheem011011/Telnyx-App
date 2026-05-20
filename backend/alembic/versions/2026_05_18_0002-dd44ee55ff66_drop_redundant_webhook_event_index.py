@@ -2,7 +2,7 @@
 
 unique=True on telnyx_event_id already creates a unique index.
 The additional index=True created a second, non-unique index on the
-same column — redundant and wasteful. This migration drops it.
+same column - redundant and wasteful. This migration drops it.
 
 Revision ID: dd44ee55ff66
 Revises: cc33dd44ee55

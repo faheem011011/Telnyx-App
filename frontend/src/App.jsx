@@ -29,13 +29,13 @@ class ErrorBoundary extends Component {
   }
 
   static getDerivedStateFromError() {
-    // L-14: do NOT capture error.message into state — it would render to the
+    // L-14: do NOT capture error.message into state - it would render to the
     // user and could leak internal details. Devs see it via componentDidCatch.
     return { hasError: true };
   }
 
   componentDidCatch(error, info) {
-    // Devs only — never surface to UI. Wire to a remote logger if/when added.
+    // Devs only - never surface to UI. Wire to a remote logger if/when added.
     // eslint-disable-next-line no-console
     console.error('[ErrorBoundary] caught', error, info?.componentStack);
   }
@@ -73,7 +73,7 @@ function UserLayout() {
       <Sidebar onOpenDialer={() => setDialerOpen(true)} />
       <main className="flex-1 flex flex-col overflow-hidden">
         <Routes>
-          {/* Layout route: one boundary per pathname — auto-resets on navigation */}
+          {/* Layout route: one boundary per pathname - auto-resets on navigation */}
           <Route
             element={
               <RouteErrorBoundary key={location.pathname}>
@@ -107,7 +107,7 @@ function AdminLayout() {
       <Sidebar onOpenDialer={() => setDialerOpen(true)} />
       <main className="flex-1 flex flex-col overflow-hidden">
         <Routes>
-          {/* Layout route: one boundary per pathname — auto-resets on navigation */}
+          {/* Layout route: one boundary per pathname - auto-resets on navigation */}
           <Route
             element={
               <RouteErrorBoundary key={location.pathname}>

@@ -28,7 +28,7 @@ api.interceptors.response.use(
       }
     }
     if (err.response?.status === 429) {
-      const rateLimitErr = new Error('Too many requests — please wait a moment and try again.');
+      const rateLimitErr = new Error('Too many requests - please wait a moment and try again.');
       rateLimitErr.isRateLimit = true;
       return Promise.reject(rateLimitErr);
     }
@@ -36,7 +36,7 @@ api.interceptors.response.use(
   }
 );
 
-// Public API instance — no auth header, no 401 redirect.
+// Public API instance - no auth header, no 401 redirect.
 // Used for unauthenticated flows (verify-email, reset-password, forgot-password, setup)
 // so that a backend 401 (expired/invalid token) propagates to the caller's .catch()
 // rather than being swallowed by the redirect interceptor.
@@ -46,7 +46,7 @@ publicApi.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 429) {
-      const rateLimitErr = new Error('Too many requests — please wait a moment and try again.');
+      const rateLimitErr = new Error('Too many requests - please wait a moment and try again.');
       rateLimitErr.isRateLimit = true;
       return Promise.reject(rateLimitErr);
     }
@@ -61,7 +61,7 @@ export const authApi = {
   login: (email, password) =>
     api.post('/api/auth/login', { email, password }).then((r) => r.data),
   me: () => api.get('/api/auth/me').then((r) => r.data),
-  // Self-service profile patch (display name only — email/role/etc. go via admin).
+  // Self-service profile patch (display name only - email/role/etc. go via admin).
   updateMe: (data) => api.patch('/api/auth/me', data).then((r) => r.data),
   // Authenticated self-service password change. Returns 204; the caller's JWT
   // is invalidated server-side so the UI should send the user to /login next.
@@ -95,12 +95,12 @@ export const callsApi = {
     api.post('/api/calls/recording/start', { call_sid: callSid }).then((r) => r.data),
   stopRecording: (callSid) =>
     api.post('/api/calls/recording/stop', { call_sid: callSid }).then((r) => r.data),
-  // Mints a fresh Telnyx signed URL — needed because the cached recording_url
+  // Mints a fresh Telnyx signed URL - needed because the cached recording_url
   // is a 10-minute pre-signed S3 link that 403s after it expires.
   recordingUrl: (id) =>
     api.get(`/api/calls/${id}/recording-url`).then((r) => r.data),
   // voicemail_url in the DB is a raw Telnyx API URL that requires auth headers
-  // — browsers can't load it directly, so we proxy through the backend.
+  // - browsers can't load it directly, so we proxy through the backend.
   voicemailUrl: (id) =>
     api.get(`/api/calls/${id}/voicemail-url`).then((r) => r.data),
 };

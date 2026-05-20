@@ -33,6 +33,6 @@ venv/
 .vscode/
 .idea/
 
-# One-off helper scripts — never include in production image
+# One-off helper scripts - never include in production image
 create_temp_admin.py
 remove_temp_admin.py

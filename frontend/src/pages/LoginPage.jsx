@@ -53,7 +53,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Left panel — hidden on small screens */}
+      {/* Left panel - hidden on small screens */}
       <div className="hidden lg:block w-1/2 relative">
         <img
           src="/login-side.png"
@@ -62,7 +62,7 @@ export default function LoginPage() {
         />
       </div>
 
-      {/* Right panel — the form */}
+      {/* Right panel - the form */}
       <div className="flex w-full lg:w-1/2 min-h-screen flex-col items-center justify-center px-8 py-12 bg-white">
         {/* Mobile logo */}
         <div className="mb-8 flex flex-col items-center gap-2 lg:hidden">

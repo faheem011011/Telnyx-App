@@ -1,4 +1,4 @@
-"""Analytics endpoint — KPI aggregations for the dashboard."""
+"""Analytics endpoint - KPI aggregations for the dashboard."""
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -132,7 +132,7 @@ def _parse_iso(s: str) -> datetime | None:
     """M-20: parse ISO timestamp, rejecting naive (no-offset) strings.
 
     Returning None for naive timestamps forces callers to be explicit about UTC
-    or local-zone offsets — silently coercing naive→UTC produces DST-bucket bugs
+    or local-zone offsets - silently coercing naive→UTC produces DST-bucket bugs
     around spring-forward / fall-back transitions.
     """
     try:
@@ -179,7 +179,7 @@ def _extract_area_code(number: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# SQL-level summary — no records loaded into RAM
+# SQL-level summary - no records loaded into RAM
 # ---------------------------------------------------------------------------
 
 def _summarize_sql(
@@ -336,7 +336,7 @@ def get_analytics(
     else:
         target_ids = [current_user.id]
 
-    # Contact counts via SQL — no records loaded
+    # Contact counts via SQL - no records loaded
     total_contacts = db.query(func.count(Contact.id)).filter(
         Contact.owner_id.in_(target_ids)
     ).scalar() or 0
@@ -357,7 +357,7 @@ def get_analytics(
         Contact.is_favorite.is_(True),
     ).scalar() or 0
 
-    # Summary stats — pure SQL COUNT, zero records in RAM
+    # Summary stats - pure SQL COUNT, zero records in RAM
     summary      = _summarize_sql(db, target_ids, period_start, period_end, total_contacts, new_contacts, direction)
     prev_summary = _summarize_sql(db, target_ids, prev_start, prev_end, total_contacts, 0, direction)
 
@@ -536,7 +536,7 @@ def get_users_summary(
 
     user_ids = [u.id for u in users]
 
-    # Single GROUP BY query for all call stats — replaces N per-user q.all() calls
+    # Single GROUP BY query for all call stats - replaces N per-user q.all() calls
     call_stats_rows = db.query(
         Call.owner_id,
         func.count(Call.id).label("total_calls"),

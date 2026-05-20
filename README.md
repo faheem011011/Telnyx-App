@@ -1,6 +1,6 @@
-# AlphaCall — Browser-based VoIP App
+# AlphaCall - Browser-based VoIP App
 
-A professional, Dialpad/OpenPhone-style calling and messaging web app powered by **Telnyx**. Make and receive real phone calls entirely in your browser, send/receive SMS, manage contacts, and administer your team — all from one clean interface with light and dark themes.
+A professional, Dialpad/OpenPhone-style calling and messaging web app powered by **Telnyx**. Make and receive real phone calls entirely in your browser, send/receive SMS, manage contacts, and administer your team - all from one clean interface with light and dark themes.
 
 ## Tech stack
 
@@ -16,7 +16,7 @@ A professional, Dialpad/OpenPhone-style calling and messaging web app powered by
 - React 19
 - Vite 6
 - Tailwind CSS 3.4
-- Telnyx WebRTC SDK (`@telnyx/webrtc`) — browser softphone
+- Telnyx WebRTC SDK (`@telnyx/webrtc`) - browser softphone
 - React Router 7
 - Recharts
 - Lucide icons
@@ -26,20 +26,20 @@ A professional, Dialpad/OpenPhone-style calling and messaging web app powered by
 ## Features
 
 ### For all users
-- 📞 **Outbound calls** — dial any number from your browser via WebRTC
-- 📲 **Inbound calls** — receive calls to your Telnyx number, ring in-browser, accept/decline
-- 💬 **SMS** — send/receive text messages with threaded conversations
-- 🎙️ **Voicemail** — missed calls capture voicemail with automatic transcription
-- 👥 **Contacts** — full CRUD address book with favorites and blocking
-- 🔎 **Search & filter** — search across calls, contacts, messages
+- 📞 **Outbound calls** - dial any number from your browser via WebRTC
+- 📲 **Inbound calls** - receive calls to your Telnyx number, ring in-browser, accept/decline
+- 💬 **SMS** - send/receive text messages with threaded conversations
+- 🎙️ **Voicemail** - missed calls capture voicemail with automatic transcription
+- 👥 **Contacts** - full CRUD address book with favorites and blocking
+- 🔎 **Search & filter** - search across calls, contacts, messages
 - 🌓 **Light + Dark mode**
 
 ### Admin only
-- 🛡️ **Role-based access** — Admin and User roles
-- 📊 **Analytics dashboard** — KPI cards, call volume charts, per-department and per-user drill-down
-- 📥 **Export CSV** — department-aggregated or per-user analytics
-- 📱 **Phone number management** — purchase, assign, unassign, and release Telnyx numbers
-- 👤 **User management** — create, edit, deactivate users; assign departments and roles
+- 🛡️ **Role-based access** - Admin and User roles
+- 📊 **Analytics dashboard** - KPI cards, call volume charts, per-department and per-user drill-down
+- 📥 **Export CSV** - department-aggregated or per-user analytics
+- 📱 **Phone number management** - purchase, assign, unassign, and release Telnyx numbers
+- 👤 **User management** - create, edit, deactivate users; assign departments and roles
 
 ---
 
@@ -49,8 +49,8 @@ A professional, Dialpad/OpenPhone-style calling and messaging web app powered by
 
 - **Python 3.12+**
 - **Node.js 20+** and npm
-- **ngrok** (for local Telnyx webhooks) — [download](https://ngrok.com/download)
-- A **Telnyx account** — [sign up](https://telnyx.com)
+- **ngrok** (for local Telnyx webhooks) - [download](https://ngrok.com/download)
+- A **Telnyx account** - [sign up](https://telnyx.com)
 
 ### 1. Clone and install
 
@@ -73,15 +73,15 @@ Fill in `backend/.env` with your Telnyx credentials (see [Telnyx setup](#telnyx-
 ### 3. Run the app
 
 ```bash
-# Terminal 1 — backend
+# Terminal 1 - backend
 cd backend
 uvicorn app.main:app --reload
 
-# Terminal 2 — frontend
+# Terminal 2 - frontend
 cd frontend
 npm run dev
 
-# Terminal 3 — ngrok (so Telnyx can reach your backend)
+# Terminal 3 - ngrok (so Telnyx can reach your backend)
 ngrok http 8000
 ```
 
@@ -107,25 +107,25 @@ alembic downgrade -1
 
 ## Telnyx setup walkthrough
 
-### Step 1 — Get your API Key
+### Step 1 - Get your API Key
 
 1. Log in to the [Telnyx Portal](https://portal.telnyx.com)
 2. Go to **Auth → API Keys → Add API Key**
 3. Copy the key (starts with `KEY_V2_…`) → paste into `.env` as `TELNYX_API_KEY`
 
-### Step 2 — Get a phone number
+### Step 2 - Get a phone number
 
 1. Go to **Numbers → Buy Numbers**
 2. Search for a US number with **Voice + SMS**
 3. Purchase it and copy the number (e.g. `+15551234567`) → `TELNYX_PHONE_NUMBER`
 
-### Step 3 — Create a Messaging Profile
+### Step 3 - Create a Messaging Profile
 
 1. Go to **Messaging → Messaging Profiles → Add New Profile**
 2. Copy the **Profile ID** → `TELNYX_MESSAGING_PROFILE_ID`
 3. Assign your number to this profile
 
-### Step 4 — Start ngrok
+### Step 4 - Start ngrok
 
 ```bash
 ngrok http 8000
@@ -135,28 +135,28 @@ Copy the `https://abc123.ngrok-free.app` URL → paste into `backend/.env` as `P
 
 > The ngrok URL changes every restart on the free tier. Update it in `.env` and the Telnyx Portal each time.
 
-### Step 5 — Create a TeXML Application (for call control)
+### Step 5 - Create a TeXML Application (for call control)
 
 1. Go to **Voice → TeXML → Create TeXML App**
 2. Name: `AlphaCall`
 3. **Voice**:
-   - Request URL: `https://abc123.ngrok-free.app/api/telnyx/outbound-call` — **POST**
-   - Status Callback URL: `https://abc123.ngrok-free.app/api/telnyx/call-status` — **POST**
+   - Request URL: `https://abc123.ngrok-free.app/api/telnyx/outbound-call` - **POST**
+   - Status Callback URL: `https://abc123.ngrok-free.app/api/telnyx/call-status` - **POST**
 4. Copy the **Connection ID** → `TELNYX_CONNECTION_ID`
 
-### Step 6 — Configure your phone number's webhooks
+### Step 6 - Configure your phone number's webhooks
 
 1. Go to **Numbers → My Numbers → [your number] → Edit**
-2. **Inbound calls** webhook: `https://abc123.ngrok-free.app/api/telnyx/incoming-call` — **POST**
-3. **Inbound SMS** webhook: `https://abc123.ngrok-free.app/api/telnyx/incoming-sms` — **POST**
+2. **Inbound calls** webhook: `https://abc123.ngrok-free.app/api/telnyx/incoming-call` - **POST**
+3. **Inbound SMS** webhook: `https://abc123.ngrok-free.app/api/telnyx/incoming-sms` - **POST**
 4. Assign the number to your TeXML connection
 
-### Step 7 — Webhook Public Key (for signature verification)
+### Step 7 - Webhook Public Key (for signature verification)
 
 1. Go to **Account → API Keys → Webhook Keys**
 2. Copy the **Public Key** → `TELNYX_PUBLIC_KEY`
 
-### Step 8 — Verify your `backend/.env`
+### Step 8 - Verify your `backend/.env`
 
 ```env
 TELNYX_API_KEY=KEY_V2_...
@@ -177,8 +177,8 @@ PUBLIC_BACKEND_URL=https://abc123.ngrok-free.app
 
 - [ ] Login works
 - [ ] Sidebar shows "Ready to dial" (green dot)
-- [ ] Click **Call**, dial a number — outbound call connects
-- [ ] Call your Telnyx number from a cell phone — incoming modal appears, Accept works
+- [ ] Click **Call**, dial a number - outbound call connects
+- [ ] Call your Telnyx number from a cell phone - incoming modal appears, Accept works
 - [ ] Hang up → call appears in **Inbox**
 - [ ] Missed call captures voicemail under **Voicemails** tab
 - [ ] Send SMS from **Messages → New**, reply appears in thread
@@ -253,13 +253,13 @@ Missing or wrong `TELNYX_API_KEY` or `TELNYX_CONNECTION_ID` in `backend/.env`. R
 **Incoming calls never reach the browser**
 - Verify your Telnyx number's inbound webhook points to your current ngrok URL
 - Check ngrok is still running
-- Watch FastAPI logs — you should see a POST to `/api/telnyx/incoming-call`
+- Watch FastAPI logs - you should see a POST to `/api/telnyx/incoming-call`
 
 **CORS errors in browser console**
 Make sure `FRONTEND_URL` in `backend/.env` matches where the frontend is running (default `http://localhost:5173`).
 
 **Voicemail audio won't play**
-The recording may still be processing — wait 30 seconds and refresh.
+The recording may still be processing - wait 30 seconds and refresh.
 
 ---
 

@@ -10,13 +10,13 @@ import { useDepartments } from '../hooks/useDepartments';
 import Avatar from '../components/Avatar';
 import { formatPhone } from '../utils/format';
 const ROLES = ['user', 'admin'];
-// Must match backend UserAdminCreate.password Field min_length — keep in sync.
+// Must match backend UserAdminCreate.password Field min_length - keep in sync.
 const MIN_PASSWORD_LENGTH = 12;
 
 // FastAPI returns 422 validation errors as an array of {type, loc, msg, input, ctx}
 // objects. Rendering that array directly as React children throws error #31
 // ("Objects are not valid as a React child"), which bubbles to ErrorBoundary
-// and shows the generic "Something went wrong" page — burying the actual
+// and shows the generic "Something went wrong" page - burying the actual
 // validation message that would have told the admin what to fix.
 function formatApiError(err, fallback) {
   const detail = err?.response?.data?.detail;
@@ -127,7 +127,7 @@ function PasswordInputWithToggle({ id, required, placeholder, value, onChange, v
   );
 }
 
-// ─── UserForm — defined at module level to avoid focus-loss on every render ───
+// ─── UserForm - defined at module level to avoid focus-loss on every render ───
 
 function UserForm({ form, setForm, actionError, actionLoading, onCancel, onSubmit, submitLabel, isEdit = false, departments = [] }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -461,7 +461,7 @@ function UsersTab({ users, loading, onRefresh }) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-muted">{u.department || '—'}</td>
+                    <td className="px-4 py-3 text-muted">{u.department || '-'}</td>
                     <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
@@ -1383,7 +1383,7 @@ function AuditRow({ entry }) {
             <div className="text-[11px] text-muted font-mono truncate max-w-[120px]">{entry.resource_id}</div>
           )}
         </td>
-        <td className="px-4 py-3 text-[11px] text-muted font-mono">{entry.ip_address || '—'}</td>
+        <td className="px-4 py-3 text-[11px] text-muted font-mono">{entry.ip_address || '-'}</td>
       </tr>
       {expanded && entry.detail && (
         <tr style={{ borderColor: 'rgb(var(--border-primary))' }} className="border-t">

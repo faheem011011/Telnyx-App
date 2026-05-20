@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.config import settings   # noqa: E402
 from app.database import Base     # noqa: E402
-import app.models                 # noqa: E402, F401 — registers all models on Base.metadata
+import app.models                 # noqa: E402, F401 - registers all models on Base.metadata
 
 # ── Alembic Config ──────────────────────────────────────────────────────────────
 config = context.config
@@ -30,7 +30,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     """
-    Run in 'offline' mode — no live DB connection needed.
+    Run in 'offline' mode - no live DB connection needed.
     Generates pure SQL that can be reviewed or applied manually.
     """
     url = config.get_main_option("sqlalchemy.url")

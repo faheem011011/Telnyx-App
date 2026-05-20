@@ -4,9 +4,9 @@ import { useSSE } from '../hooks/useSSE';
 
 const AuthContext = createContext(null);
 
-// L-13: 5 min instead of 30 s — server-side deactivation propagation is now
+// L-13: 5 min instead of 30 s - server-side deactivation propagation is now
 // eventually-consistent within 5 min. The authoritative revocation mechanism
-// is the JWT `tv` (token_version) claim — bumping it on the user row forces
+// is the JWT `tv` (token_version) claim - bumping it on the user row forces
 // re-login on the very next request regardless of polling cadence (see H-03).
 const SESSION_CHECK_INTERVAL = 5 * 60 * 1000;
 
@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Periodic heartbeat — detects deactivation within ~5 min (L-13).
+  // Periodic heartbeat - detects deactivation within ~5 min (L-13).
   // If the user is deactivated or token_version is bumped, /api/auth/me
   // returns 401 and the api.js interceptor clears the token and redirects
   // to /login. Even with the relaxed cadence, immediate revocation is
@@ -42,7 +42,7 @@ export function AuthProvider({ children }) {
         const updated = await authApi.me();
         // H-08: only replace the reference when data actually changed so
         // TelnyxContext's WebRTC useEffect (which depends on user) does not
-        // tear down and re-initialize the client — dropping active calls.
+        // tear down and re-initialize the client - dropping active calls.
         setUser(prev => {
           if (!prev) return updated;
           const changed =
@@ -83,12 +83,12 @@ export function AuthProvider({ children }) {
   // Cross-tab logout: if the auth_token is removed in another tab
   // (e.g. user clicked Logout there), log this tab out as well so
   // we don't leave authenticated UI orphaned in a second window.
-  // Note: the 'storage' event only fires in OTHER tabs — never in the
+  // Note: the 'storage' event only fires in OTHER tabs - never in the
   // tab that performed the change, so this won't recursively redirect.
   useEffect(() => {
     const handleStorage = (e) => {
       if (e.key === 'auth_token' && !e.newValue) {
-        // Token cleared in another tab — log out here too
+        // Token cleared in another tab - log out here too
         setUser(null);
         window.location.href = '/login';
       }
@@ -117,7 +117,7 @@ export function AuthProvider({ children }) {
     // Storing the JWT in localStorage means any successful XSS injection
     // can exfiltrate the token. This is an accepted trade-off for now,
     // pending a Phase 2 migration to HttpOnly + Secure + SameSite=Strict
-    // cookies (which would require backend changes — server-set cookie on
+    // cookies (which would require backend changes - server-set cookie on
     // /api/auth/login, CSRF protection, and a same-site/proxied frontend).
     // Mitigations currently in place:
     //   1. Strict CSP in main.py blocks inline/external script execution.

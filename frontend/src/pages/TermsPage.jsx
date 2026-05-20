@@ -148,7 +148,7 @@ export default function TermsPage() {
             </h1>
             <p className="text-lg text-gray-600 leading-relaxed mb-6">
               The rules, rights, and responsibilities governing your use of{' '}
-              <strong className="text-gray-800">AlphaCall</strong> — AlphaBridge Consulting's
+              <strong className="text-gray-800">AlphaCall</strong> - AlphaBridge Consulting's
               internal business communication platform for staff augmentation and technology hiring outreach.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
@@ -171,7 +171,7 @@ export default function TermsPage() {
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10 lg:py-14">
         <div className="flex gap-10 lg:gap-16">
 
-          {/* TOC — sticky sidebar */}
+          {/* TOC - sticky sidebar */}
           <aside className="hidden lg:block w-56 flex-shrink-0">
             <div className="sticky top-24">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">On this page</p>
@@ -206,7 +206,7 @@ export default function TermsPage() {
           {/* Main content */}
           <main className="flex-1 min-w-0 space-y-10 text-gray-700 leading-relaxed">
 
-            {/* 01 — Acceptance */}
+            {/* 01 - Acceptance */}
             <section>
               <SectionHeading id="acceptance" icon={FileText} number={1} title="Acceptance of Terms" />
               <div className="mt-5 space-y-4">
@@ -232,7 +232,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 02 — Account Security */}
+            {/* 02 - Account Security */}
             <section>
               <SectionHeading id="account" icon={Lock} number={2} title="Account Security & Access" subtitle="Your responsibilities for keeping your account secure" />
               <div className="mt-5 space-y-4">
@@ -254,7 +254,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 03 — Acceptable Use */}
+            {/* 03 - Acceptable Use */}
             <section>
               <SectionHeading id="acceptable" icon={Briefcase} number={3} title="Acceptable Use" subtitle="Permitted and prohibited activities on the platform" />
               <div className="mt-5 space-y-5">
@@ -287,7 +287,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 04 — SMS & Telephony */}
+            {/* 04 - SMS & Telephony */}
             <section>
               <SectionHeading id="sms" icon={Phone} number={4} title="SMS Messaging & Telephony Compliance" subtitle="10DLC campaign rules, consent requirements, and messaging standards" />
               <div className="mt-5 space-y-6">
@@ -320,7 +320,7 @@ export default function TermsPage() {
 
                   <div className="space-y-3">
                     <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 1 — Website Opt-In Form</p>
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 1 - Website Opt-In Form</p>
                       <p className="text-sm text-gray-600 mb-2">
                         Via an opt-in form at{' '}
                         <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
@@ -337,7 +337,7 @@ export default function TermsPage() {
                     </div>
 
                     <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 2 — Verbal Consent (During Calls)</p>
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 2 - Verbal Consent (During Calls)</p>
                       <p className="text-sm text-gray-600">
                         During inbound or outbound business calls, an AlphaBridge Consulting representative may
                         request explicit verbal consent to send SMS follow-up messages. Verbal consent is
@@ -346,7 +346,7 @@ export default function TermsPage() {
                     </div>
 
                     <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 3 — Written Agreement</p>
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 3 - Written Agreement</p>
                       <p className="text-sm text-gray-600">
                         Consent may also be obtained via signed contracts, master service agreements (MSAs), or
                         other written documentation that includes clear SMS-specific disclosure language.
@@ -442,11 +442,11 @@ export default function TermsPage() {
                   <p className="text-sm text-gray-700 mb-3">As an authorized AlphaCall user engaging in SMS communications, you must:</p>
                   <ul className="space-y-2">
                     <Rule>Only send SMS messages to contacts who have provided prior express written or verbal consent.</Rule>
-                    <Rule>Honor all STOP requests immediately — no further messages may be sent to that number after an opt-out.</Rule>
+                    <Rule>Honor all STOP requests immediately - no further messages may be sent to that number after an opt-out.</Rule>
                     <Rule>Respond to HELP requests using only the approved help message template above.</Rule>
                     <Rule>Comply with TCPA, CTIA guidelines, and all applicable federal and California state laws.</Rule>
                     <Rule>Maintain documented consent records for all SMS recipients within AlphaCall.</Rule>
-                    <Rule>Restrict messaging to lawful hours — 8:00 AM to 9:00 PM in the recipient's local time zone.</Rule>
+                    <Rule>Restrict messaging to lawful hours - 8:00 AM to 9:00 PM in the recipient's local time zone.</Rule>
                     <Rule>Clearly identify yourself as a representative of AlphaBridge Consulting in all communications.</Rule>
                     <Rule>Adhere to all Do Not Call (DNC) registry regulations at federal and state levels.</Rule>
                   </ul>
@@ -460,17 +460,17 @@ export default function TermsPage() {
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">TCPA</p>
-                    <p className="text-sm text-gray-700">Telephone Consumer Protection Act — governs autodialed calls and texts, requiring prior express consent from recipients.</p>
+                    <p className="text-sm text-gray-700">Telephone Consumer Protection Act - governs autodialed calls and texts, requiring prior express consent from recipients.</p>
                   </div>
                   <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">10DLC / CTIA</p>
-                    <p className="text-sm text-gray-700">10-Digit Long Code framework — carrier-registered campaigns ensuring compliant, high-delivery B2B SMS messaging.</p>
+                    <p className="text-sm text-gray-700">10-Digit Long Code framework - carrier-registered campaigns ensuring compliant, high-delivery B2B SMS messaging.</p>
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* 05 — Call Recording */}
+            {/* 05 - Call Recording */}
             <section>
               <SectionHeading id="recording" icon={Mic} number={5} title="Call Recording" subtitle="Notice and consent requirements for recorded calls" />
               <div className="mt-5 space-y-4">
@@ -481,7 +481,7 @@ export default function TermsPage() {
                 </p>
                 <HighlightBox type="warning">
                   <AlertTriangle size={14} className="inline mr-1.5 mb-0.5" />
-                  <strong>User Responsibility:</strong> You are solely responsible for ensuring compliance with all applicable call recording notice and consent laws in your jurisdiction — including one-party and two-party consent states. Some states, including California, require you to inform all parties that a call is being recorded before recording begins.
+                  <strong>User Responsibility:</strong> You are solely responsible for ensuring compliance with all applicable call recording notice and consent laws in your jurisdiction - including one-party and two-party consent states. Some states, including California, require you to inform all parties that a call is being recorded before recording begins.
                 </HighlightBox>
                 <ul className="space-y-2">
                   <Rule>Provide legally required recording notices to all call participants before initiating recording.</Rule>
@@ -492,7 +492,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 06 — Intellectual Property */}
+            {/* 06 - Intellectual Property */}
             <section>
               <SectionHeading id="ip" icon={Shield} number={6} title="Intellectual Property" />
               <div className="mt-5 space-y-4">
@@ -513,7 +513,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 07 — Confidentiality */}
+            {/* 07 - Confidentiality */}
             <section>
               <SectionHeading id="confidential" icon={Lock} number={7} title="Confidentiality" />
               <div className="mt-5 space-y-4">
@@ -542,7 +542,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 08 — Third-Party Integrations */}
+            {/* 08 - Third-Party Integrations */}
             <section>
               <SectionHeading id="third-party" icon={Globe} number={8} title="Third-Party Integrations" />
               <div className="mt-5 space-y-4">
@@ -577,7 +577,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 09 — Disclaimers */}
+            {/* 09 - Disclaimers */}
             <section>
               <SectionHeading id="disclaimers" icon={AlertTriangle} number={9} title="Disclaimers & Limitation of Liability" />
               <div className="mt-5 space-y-4">
@@ -589,8 +589,8 @@ export default function TermsPage() {
                   <h4 className="text-sm font-semibold text-gray-800 mb-3">Limitation of Liability</h4>
                   <p className="text-sm text-gray-700">
                     To the maximum extent permitted by applicable law, AlphaBridge Consulting shall not be liable
-                    for any indirect, incidental, special, consequential, or punitive damages — including but not
-                    limited to loss of profits, data, business opportunities, or goodwill — arising from:
+                    for any indirect, incidental, special, consequential, or punitive damages - including but not
+                    limited to loss of profits, data, business opportunities, or goodwill - arising from:
                   </p>
                   <ul className="mt-3 space-y-1.5">
                     <Rule>Your use of or inability to use AlphaCall</Rule>
@@ -602,14 +602,14 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 10 — Indemnification */}
+            {/* 10 - Indemnification */}
             <section>
               <SectionHeading id="indemnify" icon={Scale} number={10} title="Indemnification" />
               <div className="mt-5 space-y-3">
                 <p>
                   You agree to indemnify, defend, and hold harmless AlphaBridge Consulting and its officers,
                   directors, employees, and agents from and against any claims, liabilities, damages, losses,
-                  and expenses — including reasonable legal fees — arising out of or in connection with:
+                  and expenses - including reasonable legal fees - arising out of or in connection with:
                 </p>
                 <ul className="space-y-2">
                   <Rule>Your violation of these Terms or any applicable law or regulation.</Rule>
@@ -620,7 +620,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 11 — Termination */}
+            {/* 11 - Termination */}
             <section>
               <SectionHeading id="termination" icon={AlertTriangle} number={11} title="Termination" />
               <div className="mt-5 space-y-3">
@@ -635,12 +635,12 @@ export default function TermsPage() {
                   separation, or business necessity.
                 </p>
                 <HighlightBox type="info">
-                  Upon termination, your license to use AlphaCall ceases immediately. Provisions of these Terms that by their nature should survive termination — including confidentiality, indemnification, and intellectual property clauses — shall remain in effect.
+                  Upon termination, your license to use AlphaCall ceases immediately. Provisions of these Terms that by their nature should survive termination - including confidentiality, indemnification, and intellectual property clauses - shall remain in effect.
                 </HighlightBox>
               </div>
             </section>
 
-            {/* 12 — Governing Law */}
+            {/* 12 - Governing Law */}
             <section>
               <SectionHeading id="governing" icon={Scale} number={12} title="Governing Law & Updates" />
               <div className="mt-5 space-y-4">
@@ -669,7 +669,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* 13 — Contact */}
+            {/* 13 - Contact */}
             <section>
               <SectionHeading id="contact" icon={Mail} number={13} title="Contact Us" />
               <div className="mt-5">
