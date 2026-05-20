@@ -148,13 +148,13 @@ export default function TermsPage() {
             </h1>
             <p className="text-lg text-gray-600 leading-relaxed mb-6">
               The rules, rights, and responsibilities governing your use of{' '}
-              <strong className="text-gray-800">AlphaCall</strong> - AlphaBridge Consulting's
-              internal business communication platform.
+              <strong className="text-gray-800">AlphaCall</strong> — AlphaBridge Consulting's
+              internal business communication platform for staff augmentation and technology hiring outreach.
             </p>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
               <span className="flex items-center gap-1.5">
                 <RefreshCw size={13} />
-                Last updated: May 19, 2026
+                Last updated: May 20, 2026
               </span>
               <span className="flex items-center gap-1.5">
                 <Globe size={13} />
@@ -206,19 +206,24 @@ export default function TermsPage() {
           {/* Main content */}
           <main className="flex-1 min-w-0 space-y-10 text-gray-700 leading-relaxed">
 
-            {/* Acceptance */}
+            {/* 01 — Acceptance */}
             <section>
               <SectionHeading id="acceptance" icon={FileText} number={1} title="Acceptance of Terms" />
               <div className="mt-5 space-y-4">
                 <p>
                   These Terms of Service ("Terms") govern access to and use of <strong>AlphaCall</strong>,
-                  the internal web application of AlphaBridge Consulting, available at{' '}
+                  the internal business communication platform of AlphaBridge Consulting, available at{' '}
                   <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
                     phone.alphabridgeconsulting.ai
                   </a>.
+                  AlphaBridge Consulting is a California-based staff augmentation and technology hiring company
+                  that specializes in connecting businesses with vetted professionals in AI, Data Engineering,
+                  DevOps, and software development. AlphaCall is used exclusively by the company's internal
+                  business development team to conduct and receive calls with recruiters, hiring managers,
+                  HR professionals, and prospective clients.
                 </p>
                 <HighlightBox type="info">
-                  By accessing or using AlphaCall, you confirm that you are an <strong>authorized AlphaBridge Consulting user aged 18 or older</strong> and that you agree to comply with these Terms and all applicable laws and regulations.
+                  By accessing or using AlphaCall, you confirm that you are an <strong>authorized AlphaBridge Consulting employee or contractor aged 18 or older</strong> and that you agree to comply with these Terms and all applicable laws and regulations.
                 </HighlightBox>
                 <p>
                   If you do not agree to these Terms, you must immediately cease use of the platform and
@@ -227,7 +232,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Account Security */}
+            {/* 02 — Account Security */}
             <section>
               <SectionHeading id="account" icon={Lock} number={2} title="Account Security & Access" subtitle="Your responsibilities for keeping your account secure" />
               <div className="mt-5 space-y-4">
@@ -249,13 +254,12 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Acceptable Use */}
+            {/* 03 — Acceptable Use */}
             <section>
               <SectionHeading id="acceptable" icon={Briefcase} number={3} title="Acceptable Use" subtitle="Permitted and prohibited activities on the platform" />
               <div className="mt-5 space-y-5">
                 <p>
-                  AlphaCall is provided exclusively for <strong>lawful business purposes</strong> in compliance
-                  with all applicable communication and data protection laws.
+                  AlphaCall is provided exclusively for <strong>lawful business development and client outreach purposes</strong> in support of AlphaBridge Consulting's staff augmentation and technology hiring services. Permitted activities include inbound and outbound calls with recruiters, companies, hiring managers, and candidates; SMS follow-up communications with prior express consent; and internal performance monitoring by administrators.
                 </p>
 
                 <div>
@@ -266,12 +270,13 @@ export default function TermsPage() {
                     Prohibited Activities
                   </h4>
                   <ul className="space-y-2">
-                    <Prohibited>Sending unsolicited commercial messages (spam) or engaging in bulk messaging campaigns without authorization.</Prohibited>
+                    <Prohibited>Sending unsolicited SMS messages or making calls to contacts who have not provided prior express consent.</Prohibited>
+                    <Prohibited>Using the platform for personal calls or any purpose unrelated to AlphaBridge Consulting business.</Prohibited>
                     <Prohibited>Misrepresenting your identity, department, or affiliation during communications.</Prohibited>
                     <Prohibited>Attempting to gain unauthorized access to other accounts, systems, or data within the platform.</Prohibited>
                     <Prohibited>Disrupting, degrading, or interfering with platform operations or network infrastructure.</Prohibited>
-                    <Prohibited>Using the system for any activity outside approved AlphaBridge Consulting business functions.</Prohibited>
-                    <Prohibited>Violating any applicable federal, state, or local laws, including the TCPA and CAN-SPAM Act.</Prohibited>
+                    <Prohibited>Violating any applicable federal, state, or local laws, including the TCPA, CAN-SPAM Act, and CTIA guidelines.</Prohibited>
+                    <Prohibited>Contacting individuals on Do Not Call (DNC) registries without a valid exemption.</Prohibited>
                   </ul>
                 </div>
 
@@ -282,57 +287,212 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* SMS & Telephony */}
+            {/* 04 — SMS & Telephony */}
             <section>
-              <SectionHeading id="sms" icon={Phone} number={4} title="SMS & Telephony Compliance" subtitle="Rules governing outbound calls and text messages" />
-              <div className="mt-5 space-y-4">
-                <p>
-                  AlphaCall's telephony and SMS features carry significant legal obligations. When using these
-                  features, you must:
-                </p>
-                <ul className="space-y-2">
-                  <Rule>Obtain proper prior express consent before contacting any individual via SMS or phone call.</Rule>
-                  <Rule>Immediately honor all STOP requests and opt-outs — no further messages may be sent after a STOP reply.</Rule>
-                  <Rule>Comply with all Do Not Call (DNC) registry regulations at federal and state levels.</Rule>
-                  <Rule>Clearly identify yourself as a representative of AlphaBridge Consulting at the start of each call.</Rule>
-                  <Rule>Adhere to all applicable time-of-day restrictions for calls and texts.</Rule>
-                  <Rule>Maintain accurate records of consent as required by TCPA and related regulations.</Rule>
-                </ul>
+              <SectionHeading id="sms" icon={Phone} number={4} title="SMS Messaging & Telephony Compliance" subtitle="10DLC campaign rules, consent requirements, and messaging standards" />
+              <div className="mt-5 space-y-6">
+
+                {/* Campaign Use Case */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-2">Campaign Use Case</h4>
+                  <p className="text-sm text-gray-700 mb-3">
+                    AlphaBridge Consulting uses AlphaCall to conduct inbound and outbound business-to-business (B2B)
+                    voice calls and, where applicable, SMS follow-up communications with recruiters, hiring managers,
+                    HR professionals, and prospective clients. Our SMS program directly supports our staff augmentation
+                    and technology hiring services. Messages may include:
+                  </p>
+                  <ul className="space-y-2">
+                    <Rule>Staffing availability notifications and talent placement updates</Rule>
+                    <Rule>Interview scheduling confirmations and appointment reminders</Rule>
+                    <Rule>Follow-ups on staffing proposals and consulting engagements</Rule>
+                    <Rule>Service notifications, onboarding instructions, and partnership updates</Rule>
+                  </ul>
+                </div>
+
+                {/* Consent Collection */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-2">How SMS Consent Is Collected</h4>
+                  <p className="text-sm text-gray-700 mb-4">
+                    All SMS consent is explicit, SMS-specific, and entirely separate from any email or voice call consent.
+                    Providing a phone number is never mandatory. Consent is collected through one of the following
+                    documented methods:
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 1 — Website Opt-In Form</p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        Via an opt-in form at{' '}
+                        <a href="https://phone.alphabridgeconsulting.ai" className="text-brand-600 hover:underline" target="_blank" rel="noopener noreferrer">
+                          phone.alphabridgeconsulting.ai
+                        </a>
+                        . The form includes:
+                      </p>
+                      <ul className="space-y-1.5">
+                        <Rule>An optional, non-mandatory mobile phone number field</Rule>
+                        <Rule>An unchecked SMS consent checkbox that users must actively select</Rule>
+                        <Rule>Consent language displayed inline (not via popup): <em>"By checking this box, I consent to receive SMS messages from AlphaBridge Consulting about staffing and consulting services. Message and data rates may apply. Message frequency varies. Reply STOP to opt out, HELP for assistance."</em></Rule>
+                        <Rule>Direct inline links to the Privacy Policy and Terms &amp; Conditions</Rule>
+                      </ul>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 2 — Verbal Consent (During Calls)</p>
+                      <p className="text-sm text-gray-600">
+                        During inbound or outbound business calls, an AlphaBridge Consulting representative may
+                        request explicit verbal consent to send SMS follow-up messages. Verbal consent is
+                        documented in AlphaCall by the receiving agent and stored for compliance record-keeping.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-800 mb-1">Method 3 — Written Agreement</p>
+                      <p className="text-sm text-gray-600">
+                        Consent may also be obtained via signed contracts, master service agreements (MSAs), or
+                        other written documentation that includes clear SMS-specific disclosure language.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Required Disclosures */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-2">Required Disclosures for All SMS Messages</h4>
+                  <ul className="space-y-2">
+                    <Rule>Message and data rates may apply to all SMS messages we send.</Rule>
+                    <Rule>Message frequency varies based on business activity and recipient engagement.</Rule>
+                    <Rule>All messages will identify <strong>AlphaBridge Consulting</strong> as the sender.</Rule>
+                    <Rule>Reply <strong>STOP</strong> at any time to opt out of all future messages immediately.</Rule>
+                    <Rule>Reply <strong>HELP</strong> to receive support contact information.</Rule>
+                    <Rule>Reply <strong>START</strong> to re-subscribe after a previous opt-out.</Rule>
+                  </ul>
+                </div>
+
+                {/* Keyword table */}
+                <div className="overflow-hidden rounded-xl border border-gray-100">
+                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
+                    <p className="text-sm font-semibold text-gray-700">Keyword Commands</p>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left px-4 py-2.5 font-semibold text-gray-500 text-xs uppercase tracking-wide">Keyword</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-gray-500 text-xs uppercase tracking-wide">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      <tr className="hover:bg-gray-50/50">
+                        <td className="px-4 py-3 font-mono font-bold text-red-600">STOP</td>
+                        <td className="px-4 py-3 text-gray-600">Immediately unsubscribes the number from all future SMS messages</td>
+                      </tr>
+                      <tr className="hover:bg-gray-50/50">
+                        <td className="px-4 py-3 font-mono font-bold text-brand-600">HELP</td>
+                        <td className="px-4 py-3 text-gray-600">Returns support contact information and assistance details</td>
+                      </tr>
+                      <tr className="hover:bg-gray-50/50">
+                        <td className="px-4 py-3 font-mono font-bold text-emerald-600">START</td>
+                        <td className="px-4 py-3 text-gray-600">Re-subscribes a previously opted-out number</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Sample Message Templates */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-2">Sample Message Templates</h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    The following templates represent the actual messages sent through AlphaCall. All messages
+                    identify AlphaBridge Consulting as the sender and stay within the standard 160-character SMS limit.
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-2">Opt-In Confirmation</p>
+                      <p className="text-sm font-mono text-emerald-900 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-emerald-100">
+                        "AlphaBridge Consulting: You're confirmed for staffing & hiring updates. Msg & data rates may apply. Msg freq varies. Reply STOP to opt out, HELP for info."
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-brand-100 bg-brand-50 p-4">
+                      <p className="text-xs font-bold text-brand-700 uppercase tracking-wide mb-2">HELP Response</p>
+                      <p className="text-sm font-mono text-brand-900 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-brand-100">
+                        "AlphaBridge Consulting: For help, email legal@alphabridgeconsulting.ai or visit alphabridgeconsulting.com. Msg & data rates may apply. Reply STOP to unsubscribe."
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-red-100 bg-red-50 p-4">
+                      <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">STOP / Opt-Out Confirmation</p>
+                      <p className="text-sm font-mono text-red-900 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-red-100">
+                        "AlphaBridge Consulting: You've been unsubscribed. No further messages will be sent. Reply START to opt back in."
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Sample Outreach Message</p>
+                      <p className="text-sm font-mono text-gray-800 leading-relaxed bg-white rounded-lg px-3 py-2.5 border border-gray-200">
+                        "AlphaBridge Consulting: Hi [Name], we have vetted AI/DevOps engineers available for placement. Interested in a quick call? Reply STOP to opt out."
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Obligations */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-2">User Obligations</h4>
+                  <p className="text-sm text-gray-700 mb-3">As an authorized AlphaCall user engaging in SMS communications, you must:</p>
+                  <ul className="space-y-2">
+                    <Rule>Only send SMS messages to contacts who have provided prior express written or verbal consent.</Rule>
+                    <Rule>Honor all STOP requests immediately — no further messages may be sent to that number after an opt-out.</Rule>
+                    <Rule>Respond to HELP requests using only the approved help message template above.</Rule>
+                    <Rule>Comply with TCPA, CTIA guidelines, and all applicable federal and California state laws.</Rule>
+                    <Rule>Maintain documented consent records for all SMS recipients within AlphaCall.</Rule>
+                    <Rule>Restrict messaging to lawful hours — 8:00 AM to 9:00 PM in the recipient's local time zone.</Rule>
+                    <Rule>Clearly identify yourself as a representative of AlphaBridge Consulting in all communications.</Rule>
+                    <Rule>Adhere to all Do Not Call (DNC) registry regulations at federal and state levels.</Rule>
+                  </ul>
+                </div>
+
+                <HighlightBox type="warning">
+                  <AlertTriangle size={14} className="inline mr-1.5 mb-0.5" />
+                  <strong>TCPA Compliance:</strong> Violations of SMS consent requirements can result in statutory damages of $500–$1,500 per message under the Telephone Consumer Protection Act. Users who engage in unauthorized messaging may face personal liability in addition to disciplinary action by AlphaBridge Consulting.
+                </HighlightBox>
+
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">TCPA</p>
-                    <p className="text-sm text-gray-700">Telephone Consumer Protection Act — governs autodialed calls and texts to consumers.</p>
+                    <p className="text-sm text-gray-700">Telephone Consumer Protection Act — governs autodialed calls and texts, requiring prior express consent from recipients.</p>
                   </div>
                   <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">CAN-SPAM Act</p>
-                    <p className="text-sm text-gray-700">Federal law regulating commercial email and electronic messages sent for business purposes.</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">10DLC / CTIA</p>
+                    <p className="text-sm text-gray-700">10-Digit Long Code framework — carrier-registered campaigns ensuring compliant, high-delivery B2B SMS messaging.</p>
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* Call Recording */}
+            {/* 05 — Call Recording */}
             <section>
               <SectionHeading id="recording" icon={Mic} number={5} title="Call Recording" subtitle="Notice and consent requirements for recorded calls" />
               <div className="mt-5 space-y-4">
                 <p>
                   Calls made through AlphaCall <strong>may be recorded or monitored</strong> for quality assurance,
-                  compliance, and training purposes.
+                  performance evaluation, compliance, and training purposes. Administrators may review call
+                  activity and metrics to track team KPIs and productivity.
                 </p>
                 <HighlightBox type="warning">
                   <AlertTriangle size={14} className="inline mr-1.5 mb-0.5" />
-                  <strong>User Responsibility:</strong> You are solely responsible for ensuring compliance with all applicable call recording notice and consent laws in your jurisdiction — including one-party and two-party consent states. Some states require you to inform all parties that a call is being recorded before recording begins.
+                  <strong>User Responsibility:</strong> You are solely responsible for ensuring compliance with all applicable call recording notice and consent laws in your jurisdiction — including one-party and two-party consent states. Some states, including California, require you to inform all parties that a call is being recorded before recording begins.
                 </HighlightBox>
                 <ul className="space-y-2">
                   <Rule>Provide legally required recording notices to all call participants before initiating recording.</Rule>
                   <Rule>Obtain explicit consent where required by applicable state or federal law.</Rule>
-                  <Rule>Never use recordings for any purpose other than authorized business activities.</Rule>
+                  <Rule>Never use recordings for any purpose other than authorized AlphaBridge Consulting business activities.</Rule>
                   <Rule>Handle all recordings in accordance with AlphaBridge Consulting data protection policies.</Rule>
                 </ul>
               </div>
             </section>
 
-            {/* Intellectual Property */}
+            {/* 06 — Intellectual Property */}
             <section>
               <SectionHeading id="ip" icon={Shield} number={6} title="Intellectual Property" />
               <div className="mt-5 space-y-4">
@@ -353,7 +513,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Confidentiality */}
+            {/* 07 — Confidentiality */}
             <section>
               <SectionHeading id="confidential" icon={Lock} number={7} title="Confidentiality" />
               <div className="mt-5 space-y-4">
@@ -366,8 +526,8 @@ export default function TermsPage() {
                     'Call records and transcripts',
                     'Analytics and performance data',
                     'Contact and client information',
-                    'Company strategies and operations',
-                    'Internal communications',
+                    'Candidate and recruiter details',
+                    'Company strategies and staffing pipelines',
                     'Platform configuration and features',
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 px-4 py-3 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-700">
@@ -382,7 +542,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Third-Party Integrations */}
+            {/* 08 — Third-Party Integrations */}
             <section>
               <SectionHeading id="third-party" icon={Globe} number={8} title="Third-Party Integrations" />
               <div className="mt-5 space-y-4">
@@ -397,7 +557,7 @@ export default function TermsPage() {
                       <p className="font-semibold text-gray-800">Telnyx</p>
                     </div>
                     <p className="text-sm text-gray-600">
-                      Powers all telephony and SMS capabilities, including call routing, phone number management, and message delivery.
+                      Powers all telephony and SMS capabilities, including call routing, phone number management, 10DLC campaign delivery, and message transmission.
                     </p>
                   </div>
                   <div className="p-5 rounded-xl border border-gray-100 bg-gradient-to-b from-gray-50 to-white">
@@ -406,7 +566,7 @@ export default function TermsPage() {
                       <p className="font-semibold text-gray-800">Clerk</p>
                     </div>
                     <p className="text-sm text-gray-600">
-                      Provides secure user authentication, session management, and access control for the platform.
+                      Provides secure user authentication, session management, and role-based access control for the platform.
                     </p>
                   </div>
                 </div>
@@ -417,7 +577,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Disclaimers */}
+            {/* 09 — Disclaimers */}
             <section>
               <SectionHeading id="disclaimers" icon={AlertTriangle} number={9} title="Disclaimers & Limitation of Liability" />
               <div className="mt-5 space-y-4">
@@ -442,7 +602,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Indemnification */}
+            {/* 10 — Indemnification */}
             <section>
               <SectionHeading id="indemnify" icon={Scale} number={10} title="Indemnification" />
               <div className="mt-5 space-y-3">
@@ -460,7 +620,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Termination */}
+            {/* 11 — Termination */}
             <section>
               <SectionHeading id="termination" icon={AlertTriangle} number={11} title="Termination" />
               <div className="mt-5 space-y-3">
@@ -471,7 +631,8 @@ export default function TermsPage() {
                 </p>
                 <p>
                   Grounds for suspension or termination include, but are not limited to: violation of these
-                  Terms, misuse of the platform, security concerns, employment separation, or business necessity.
+                  Terms, misuse of the platform, SMS compliance violations, security concerns, employment
+                  separation, or business necessity.
                 </p>
                 <HighlightBox type="info">
                   Upon termination, your license to use AlphaCall ceases immediately. Provisions of these Terms that by their nature should survive termination — including confidentiality, indemnification, and intellectual property clauses — shall remain in effect.
@@ -479,7 +640,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Governing Law */}
+            {/* 12 — Governing Law */}
             <section>
               <SectionHeading id="governing" icon={Scale} number={12} title="Governing Law & Updates" />
               <div className="mt-5 space-y-4">
@@ -489,7 +650,8 @@ export default function TermsPage() {
                     <p className="font-semibold text-gray-800 text-sm">California Law</p>
                     <p className="text-sm text-gray-600 mt-1">
                       These Terms are governed by and construed in accordance with the laws of the State of
-                      California, without regard to its conflict of law provisions.
+                      California, without regard to its conflict of law provisions. Any disputes shall be
+                      resolved in the courts of the State of California.
                     </p>
                   </div>
                 </div>
@@ -507,7 +669,7 @@ export default function TermsPage() {
               </div>
             </section>
 
-            {/* Contact */}
+            {/* 13 — Contact */}
             <section>
               <SectionHeading id="contact" icon={Mail} number={13} title="Contact Us" />
               <div className="mt-5">
