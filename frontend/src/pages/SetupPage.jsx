@@ -8,6 +8,8 @@ export default function SetupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [smsOptIn, setSmsOptIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [checking, setChecking] = useState(true);
@@ -86,6 +88,15 @@ export default function SetupPage() {
       placeholder: 'At least 12 chars (A-z, 0-9, special)',
       autoComplete: 'off',
       onChange: (e) => setPassword(e.target.value),
+    },
+    {
+      id: 'phone',
+      label: 'Mobile Number (optional)',
+      required: false,
+      type: 'tel',
+      placeholder: '+1 (555) 000-0000',
+      autoComplete: 'off',
+      onChange: (e) => setPhone(e.target.value),
     },
   ];
 
@@ -205,22 +216,31 @@ export default function SetupPage() {
           }
         />
 
-        {/* SMS compliance notice - required for 10DLC opt-in disclosure */}
-        <div className="w-full max-w-sm mx-auto mt-2 px-4 py-3 rounded-xl border border-gray-100 bg-gray-50">
-          <p className="text-[11px] text-gray-500 leading-relaxed text-center">
-            By creating an account you agree to receive SMS notifications from{' '}
-            <strong>Alphacall</strong> (missed calls, voicemail alerts, system updates).
-            Message frequency may vary. Msg &amp; data rates may apply.
-            Reply <strong>STOP</strong> to opt out · <strong>HELP</strong> for help.
-            {' '}
-            <a href="/privacypolicy" target="_blank" rel="noopener noreferrer" className="text-[#07438C] hover:underline">
-              Privacy Policy
-            </a>
-            {' · '}
-            <a href="/termsandconditions" target="_blank" rel="noopener noreferrer" className="text-[#07438C] hover:underline">
-              Terms &amp; Conditions
-            </a>
-          </p>
+        {/* SMS opt-in - explicit unchecked consent, required for 10DLC compliance */}
+        <div className="w-full max-w-sm mx-auto mt-2 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={smsOptIn}
+              onChange={(e) => setSmsOptIn(e.target.checked)}
+              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-[#07438C] focus:ring-[#07438C]"
+            />
+            <span className="text-[11px] text-gray-500 leading-relaxed">
+              By checking this box, I consent to receive SMS messages from{' '}
+              <strong className="text-gray-700">AlphaBridge Consulting</strong> about staffing and consulting services.
+              Message and data rates may apply. Message frequency varies.
+              Reply <strong className="text-gray-700">STOP</strong> to opt out,{' '}
+              <strong className="text-gray-700">HELP</strong> for assistance.{' '}
+              <a href="/privacypolicy" target="_blank" rel="noopener noreferrer" className="text-[#07438C] hover:underline">
+                Privacy Policy
+              </a>
+              {' & '}
+              <a href="/termsandconditions" target="_blank" rel="noopener noreferrer" className="text-[#07438C] hover:underline">
+                Terms &amp; Conditions
+              </a>
+              . Providing your mobile number and checking this box is entirely optional and is not required to create an account.
+            </span>
+          </label>
         </div>
       </div>
     </div>
